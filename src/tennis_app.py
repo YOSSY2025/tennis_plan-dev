@@ -215,7 +215,7 @@ def check_and_show_reminders():
         if messages_to_show:
             for m in messages_to_show:
                 # 目立つように info または warning で表示
-                st.info(f"🔔 **お知らせ**: {m}", icon="xx")
+                st.info(f"🔔 **お知らせ**: {m}", icon="")
 
     except Exception as e:
         print(f"Reminder Error: {e}")
