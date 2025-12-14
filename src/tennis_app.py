@@ -13,7 +13,7 @@ if not GSHEET_ID:
     raise RuntimeError("GSHEET_ID が設定されていません")
 
 @st.cache_resource(show_spinner=False)
-def get_gsheet():
+def get_gsheet(sheet_id):
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
 
     service_account_info = dict(st.secrets["google"])
@@ -24,10 +24,10 @@ def get_gsheet():
     )
 
     client = gspread.authorize(creds)
-    worksheet = client.open_by_key(GSHEET_ID).sheet1
+    worksheet = client.open_by_key(sheet_id).sheet1
     return worksheet
 
-worksheet = get_gsheet()
+worksheet = get_gsheet(GSHEET_ID)
 
 
 #データ読み込み
@@ -112,17 +112,6 @@ def save_reservations(df):
     # Google Sheets にアップデート
     worksheet.clear()
     worksheet.update(values)
-
-# ===== JST変換関数 =====
-def to_jst_date(iso_str):
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return (dt + timedelta(hours=9)).date()
-    except Exception:
-        if isinstance(iso_str, date):
-            return iso_str
-        return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
-
 
 # ===== JST変換 =====
 def to_jst_date(iso_str):
@@ -376,20 +365,19 @@ if cal_state:
             # 一意化 & 五十音順
             past_nicks = sorted(set(past_nicks), key=lambda s: s)
 
-            # 選択肢 + 新規入力をまとめて一箇所で表示
+            default_option = "(ニックネーム選択または入力)"
+            
             nick_choice = st.selectbox("ニックネーム選択または新規登録",
-                                    options=["(ニックネーム選択または入力)"] + past_nicks + ["新規登録"], key=f"nick_choice_{idx}")
+                                    options=[default_option] + past_nicks + ["新規登録"], 
+                                    key=f"nick_choice_{idx}")
 
             if nick_choice == "新規登録":
                 nick = st.text_input("新しいニックネーム入力", key=f"nick_input_{idx}")
-            elif nick_choice == "(入力/選択)":
+            elif nick_choice == default_option: # 変数を使って判定
                 nick = ""
             else:
                 nick = nick_choice
-        
-
-            # 新規登録の場合だけ入力欄を表示
-            # 参加状況
+            
             part = st.radio("参加状況", ["参加", "不参加", "削除"], key=f"part_{idx}")
 
             if st.button("反映", key=f"apply_{idx}"):
