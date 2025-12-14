@@ -7,62 +7,55 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ===== Google Sheets 認証 =====
-# st.secrets["google"] の中から探すように変更
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
 if not GSHEET_ID:
     st.error("Secretsの設定エラー: [google] セクション内に GSHEET_ID が見つかりません。")
-    st.stop() # 処理をここで止める
+    st.stop()
 
+# キャッシュ設定: sheet_idを引数にしてリロード対応
 @st.cache_resource(show_spinner=False)
 def get_gsheet(sheet_id):
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
-
     service_account_info = dict(st.secrets["google"])
-
     creds = Credentials.from_service_account_info(
         service_account_info,
         scopes=scope
     )
-
     client = gspread.authorize(creds)
     worksheet = client.open_by_key(sheet_id).sheet1
     return worksheet
 
 try:
-    # ★修正点1の続き：ここでIDを渡す
     worksheet = get_gsheet(GSHEET_ID)
 except Exception as e:
     st.error(f"Google Sheetへの接続に失敗しました: {e}")
     st.stop()
-    
 
-#データ読み込み
-records = worksheet.get_all_records()
-df = pd.DataFrame(records)
 
 # ===== Google Sheets 読み書き関数 =====
 def load_reservations():
+    # 常に最新を取得
     data = worksheet.get_all_records()
     df = pd.DataFrame(data)
 
-    # 期待されるカラムを確実に用意する
+    # 期待されるカラム（consider を含む）
     expected_cols = [
         "date","facility","status","start_hour","start_minute",
-        "end_hour","end_minute","participants","absent","message"
+        "end_hour","end_minute","participants","absent","consider","message"
     ]
     for c in expected_cols:
         if c not in df.columns:
-            # 欠けているカラムは空文字で埋める（participants/absent は後でリスト化）
+            # カラムがなければ空文字で作成
             df[c] = ""
 
     # 日付パース
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
-    # 時刻カラムを整数化（文字列や空欄が混在する可能性を吸収）
+    # 時刻カラムを整数化
     for col in ["start_hour", "start_minute", "end_hour", "end_minute"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    # participants, absent をリストに変換
+    # リスト変換ヘルパー
     def _to_list_cell(x):
         if isinstance(x, (list, tuple)):
             return list(x)
@@ -70,8 +63,9 @@ def load_reservations():
             return []
         return str(x).split(";")
 
-    df["participants"] = df["participants"].apply(_to_list_cell)
-    df["absent"] = df["absent"].apply(_to_list_cell)
+    # participants, absent, consider をそれぞれリスト化
+    for col in ["participants", "absent", "consider"]:
+        df[col] = df[col].apply(_to_list_cell)
 
     # message を空文字で埋める
     df["message"] = df["message"].fillna("")
@@ -79,47 +73,37 @@ def load_reservations():
     return df
 
 def save_reservations(df):
-    # participants, absent を文字列に変換
     df_to_save = df.copy()
-    for col in ["participants", "absent"]:
+    
+    # 3つのリストカラムを文字列(セミコロン区切り)に変換
+    for col in ["participants", "absent", "consider"]:
         if col in df_to_save.columns:
             df_to_save[col] = df_to_save[col].apply(lambda lst: ";".join(lst) if isinstance(lst, (list, tuple)) else (lst if pd.notnull(lst) else ""))
 
-    # date を ISO 文字列に変換しておく
+    # date を ISO 文字列に変換
     if "date" in df_to_save.columns:
         df_to_save["date"] = df_to_save["date"].apply(lambda d: d.isoformat() if isinstance(d, (date, datetime, pd.Timestamp)) else (str(d) if pd.notnull(d) else ""))
 
-    # NaN を空文字にし、すべてセルを JSON 互換なプリミティブに変換する
+    # NaN を空文字にし、すべてセルを文字列化して保存
     df_to_save = df_to_save.where(pd.notnull(df_to_save), "")
 
     def _serialize_cell(v):
-        # datetime-like
         if isinstance(v, (date, datetime, pd.Timestamp)):
             return v.isoformat()
-        # list/tuple -> join
         if isinstance(v, (list, tuple)):
             return ";".join(map(str, v))
-        # primitives
-        if isinstance(v, (str, int, float, bool)):
-            return v
-        # fallback: empty string for NaN/None, else str()
-        try:
-            if pd.isna(v):
-                return ""
-        except Exception:
-            pass
         return str(v)
 
+    # ヘッダーとデータを準備
     values = [df_to_save.columns.values.tolist()]
-    # apply serialization per-cell to ensure JSON-serializable types
-    ser_df = df_to_save.applymap(_serialize_cell)
+    ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
-    # Google Sheets にアップデート
+    # Google Sheets にアップデート（全書き換え）
     worksheet.clear()
     worksheet.update(values)
 
-# ===== JST変換 =====
+# ===== JST変換関数 =====
 def to_jst_date(iso_str):
     """ISO形式の日付文字列をJSTのdate型に変換"""
     try:
@@ -130,33 +114,17 @@ def to_jst_date(iso_str):
             return iso_str
         return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
     
-# ===== CSSで親要素の高さを自然にする =====
+# ===== CSS設定 =====
 st.markdown("""
 <style>
-
-/* ← 最重要：最近の Streamlit はこのセレクタで余白を適用する必要がある */
-.stAppViewContainer {
-    margin-top: 0.5rem !important;
-}
-
-/* これが古いセレクタ。環境によっては効かない */
-.stApp {
-    padding-top: 0 !important;
-}
-
-/* コンテナの上の余白を最小化 */
-.block-container {
-    padding-top: 2.0rem !important; /* ここでタイトルの位置が変わる必要に応じて調整(小さいと余白が減り上へ行く) */
-}
-
+.stAppViewContainer { margin-top: 0.5rem !important; }
+.stApp { padding-top: 0 !important; }
+.block-container { padding-top: 2.0rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
 
-
-
 # ===== タイトル =====
-
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
 
 # ===== データ読み込み =====
@@ -175,12 +143,11 @@ for idx, r in df_res.iterrows():
     if pd.isna(r["date"]):
         continue
 
+    # 時間計算
     start_dt = datetime.combine(r["date"], time(int(r.get("start_hour",0)), int(r.get("start_minute",0))))
     end_dt   = datetime.combine(r["date"], time(int(r.get("end_hour",0)), int(r.get("end_minute",0))))
 
     color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
-
-    # タイトルをステータス＋施設名のみにする
     title_str = f"{r['status']} {r['facility']}"
 
     events.append({
@@ -194,8 +161,6 @@ for idx, r in df_res.iterrows():
     })
 
 
-
-
 # ===== カレンダー表示 =====
 cal_state = calendar(
     events=events,
@@ -205,13 +170,10 @@ cal_state = calendar(
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
         "eventDisplay": "block",
         "displayEventTime": False,
-        "height": "auto",         # ✅ 高さを自動調整（重要）
-        "contentHeight": "auto",  # ✅ カレンダー内コンテンツに応じて伸縮
-        "aspectRatio": 1.2,       # ✅ 横長になりすぎないよう調整（1.0〜1.5で微調整）
-        "titleFormat": {  # ここを追加
-            "year": "numeric",
-            "month": "2-digit"  # 12 のように2桁で表示
-        }
+        "height": "auto",
+        "contentHeight": "auto",
+        "aspectRatio": 1.2,
+        "titleFormat": {"year": "numeric", "month": "2-digit"}
     },
     key="reservation_calendar"
 )
@@ -221,7 +183,7 @@ cal_state = calendar(
 if cal_state:
     callback = cal_state.get("callback")
 
-    # ---- 日付クリック ----
+    # ---- 日付クリック（新規登録） ----
     if callback == "dateClick":
         clicked_date = cal_state["dateClick"]["date"]
         clicked_date_jst = to_jst_date(clicked_date)
@@ -229,25 +191,24 @@ if cal_state:
         st.session_state['clicked_date'] = clicked_date
         st.session_state['clicked_date_jst'] = clicked_date_jst
     
-        # スクロール用のアンカーと自動スクロール
+        # スクロール
         st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <script>
-        document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});
-        </script>
-        """, unsafe_allow_html=True)
+        st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
         
         st.info(f"📅 {clicked_date_jst} の予約を確認/登録")
 
-        # ---- 日付クリック時の施設名入力 ----
-        # 過去登録済み施設（データが空やカラム未存在の場合に対応）
+        # 施設名選択肢作成
         if 'facility' in df_res.columns:
             past_facilities = df_res['facility'].dropna().unique().tolist()
         else:
             past_facilities = []
-        facility_select = st.selectbox("施名を選択または新規登録(直接入力で検索可能)", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
+        
+        facility_select = st.selectbox(
+            "施設名を選択または新規登録", 
+            options=["(施設名を選択)"] + past_facilities + ["新規登録"], 
+            index=0
+        )
 
-        # 新規登録の場合だけ入力欄を表示
         if facility_select == "新規登録":
             facility = st.text_input("施設名を入力")        
         elif facility_select == "(施設名を選択)" or facility_select == "" :
@@ -257,37 +218,17 @@ if cal_state:
 
         status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
 
-        # --- 時間選択（30分単位 + コンパクト配置 + モバイル調整） ---
-        st.markdown("**開始時間**", help="下のスクロールで設定します。")
-        st.write("")  # 空行を1つだけ入れて間隔を最小限に
-        start_time = st.time_input(
-            label="",
-            value=time(9, 0),
-            key=f"start_{clicked_date}",
-            step=timedelta(minutes=30),
-            label_visibility="collapsed"
-        )
-
+        # --- 時間選択 ---
+        st.markdown("**開始時間**")
+        start_time = st.time_input("", value=time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        
         st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
         st.markdown("**終了時間**")
-        st.write("")
-        end_time = st.time_input(
-            label="",
-            value=time(10, 0),
-            key=f"end_{clicked_date}",
-            step=timedelta(minutes=30),
-            label_visibility="collapsed"
-        )
+        end_time = st.time_input("", value=time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
 
-        # --- 📝 メッセージ欄を追加 ---
-        message_buf = st.text_area(
-            "メッセージ（任意）",
-            placeholder="例：集合時間や持ち物など",
-            key=f"msg_{clicked_date}"
-        )
+        # --- メッセージ ---
+        message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
         message = message_buf.replace('\n', '<br>')    
-
-
 
         # --- 登録ボタン ---
         clicked_date = st.session_state.get('clicked_date')
@@ -295,42 +236,38 @@ if cal_state:
 
         if clicked_date is not None:
             if st.button("登録", key=f"reg_{clicked_date}"):
-                #もしfacilityが空文字の場合は何もしない
                 if facility == "":
                     st.warning("⚠️ 施設名が選択されていません。")
+                elif end_time <= start_time:
+                    st.warning("⚠️ 終了時間は開始時間より後にしてください。")
                 else:
-                    if end_time <= start_time:
-                        st.warning("⚠️ 終了時間は開始時間より後にしてください。")
-                    else:
-                        df_res = pd.concat([df_res, pd.DataFrame([{
-                            "date": clicked_date_jst,
-                            "facility": facility,
-                            "status": status,
-                            "start_hour": start_time.hour,
-                            "start_minute": start_time.minute,
-                            "end_hour": end_time.hour,
-                            "end_minute": end_time.minute,
-                            "participants": [],
-                            "absent": [],
-                            "message": message
-                        }])], ignore_index=True)
-                        save_reservations(df_res)
-                        st.success(f"{clicked_date_jst} に {facility} を登録しました")
-                        st.rerun()
+                    new_row = {
+                        "date": clicked_date_jst,
+                        "facility": facility,
+                        "status": status,
+                        "start_hour": start_time.hour,
+                        "start_minute": start_time.minute,
+                        "end_hour": end_time.hour,
+                        "end_minute": end_time.minute,
+                        "participants": [],
+                        "absent": [],
+                        "consider": [], # 新規登録なので空リスト
+                        "message": message
+                    }
+                    df_res = pd.concat([df_res, pd.DataFrame([new_row])], ignore_index=True)
+                    save_reservations(df_res)
+                    st.success(f"{clicked_date_jst} に {facility} を登録しました")
+                    st.rerun()
 
 
-# ---- イベントクリック ----
+    # ---- イベントクリック（詳細・参加表明） ----
     elif callback == "eventClick":
         ev = cal_state["eventClick"]["event"]
         idx = int(ev["id"])
         
-        # スクロール用のアンカーと自動スクロール
+        # スクロール
         st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
-        st.markdown("""
-        <script>
-        document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});
-        </script>
-        """, unsafe_allow_html=True)
+        st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
         
         if idx not in df_res.index:
             st.warning("このイベントは存在しません。")
@@ -338,7 +275,7 @@ if cal_state:
             r = df_res.loc[idx]
             event_date = to_jst_date(r["date"])
 
-            # 詳細表示（改行対応）
+            # 詳細表示に「保留」を追加
             st.markdown(f"""
             ### イベント詳細
             日付: {event_date}<br>
@@ -346,21 +283,15 @@ if cal_state:
             ステータス: {r['status']}<br>
             時間:<br> &nbsp;&nbsp;{int(r['start_hour']):02d}:{int(r['start_minute']):02d} - {int(r['end_hour']):02d}:{int(r['end_minute']):02d}<br>
             参加者:<br> &nbsp;&nbsp;{', '.join(r['participants']) if r['participants'] else 'なし'}<br>
-            不参加者:<br> &nbsp;&nbsp;{', '.join(r['absent']) if r['absent'] else 'なし'}<br>
+            不参加:<br> &nbsp;&nbsp;{', '.join(r['absent']) if r['absent'] else 'なし'}<br>
+            保留:<br> &nbsp;&nbsp;{', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ:<br> &nbsp;&nbsp;{r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
-
             """, unsafe_allow_html=True)
-
-            # 施設名選択（過去登録から選択可）
-            # 過去登録済み施設（データが空やカラム未存在の場合に対応）
-            if 'facility' in df_res.columns:
-                past_facilities = df_res['facility'].dropna().unique().tolist()
-            else:
-                past_facilities = []
 
             # ---- ニックネーム入力 ----
             past_nicks = []
-            for col in ["participants", "absent"]:
+            # 参加・不参加・保留 の全リストからニックネーム履歴を取得
+            for col in ["participants", "absent", "consider"]:
                 if col in df_res.columns:
                     for lst in df_res[col]:
                         if isinstance(lst, list):
@@ -368,9 +299,8 @@ if cal_state:
                         elif isinstance(lst, str) and lst.strip():
                             past_nicks.extend(lst.split(";"))
 
-            # 一意化 & 五十音順
             past_nicks = sorted(set(past_nicks), key=lambda s: s)
-
+            
             default_option = "(ニックネーム選択または入力)"
             
             nick_choice = st.selectbox("ニックネーム選択または新規登録",
@@ -379,33 +309,42 @@ if cal_state:
 
             if nick_choice == "新規登録":
                 nick = st.text_input("新しいニックネーム入力", key=f"nick_input_{idx}")
-            elif nick_choice == default_option: # 変数を使って判定
+            elif nick_choice == default_option:
                 nick = ""
             else:
                 nick = nick_choice
-            
-            part = st.radio("参加状況", ["参加", "不参加", "削除"], key=f"part_{idx}")
+        
+            # ラジオボタンに「保留」を追加
+            part = st.radio("参加状況", ["参加", "不参加", "保留", "削除"], key=f"part_{idx}")
 
             if st.button("反映", key=f"apply_{idx}"):
                 if not nick:
                     st.warning("⚠️ ニックネームが選択されていません。")
                 else:
+                    # データ取得（なければ空）
                     participants = list(r["participants"]) if isinstance(r["participants"], list) else []
                     absent = list(r["absent"]) if isinstance(r["absent"], list) else []
+                    consider = list(r["consider"]) if "consider" in r and isinstance(r["consider"], list) else []
 
-                    # まず既存から削除
+                    # 1. 既存リストから削除（重複防止）
                     if nick in participants: participants.remove(nick)
                     if nick in absent: absent.remove(nick)
+                    if nick in consider: consider.remove(nick)
 
-                    # 反映
+                    # 2. 選択されたリストへ追加
                     if part == "参加":
                         participants.append(nick)
                     elif part == "不参加":
                         absent.append(nick)
-                    # 削除は既に削除済み
+                    elif part == "保留":
+                        consider.append(nick)
+                    # 削除の場合は何もしない
 
+                    # 3. データフレーム更新
                     df_res.at[idx, "participants"] = participants
                     df_res.at[idx, "absent"] = absent
+                    df_res.at[idx, "consider"] = consider
+                    
                     save_reservations(df_res)
                     st.success(f"{nick} は {part} に設定されました")
                     st.rerun()
