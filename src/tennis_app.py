@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 # ===== Google Sheets 認証 =====
 load_dotenv()
 
-google_secrets = json.loads(
-    os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-)
 sheetid = os.getenv("GSHEET_ID")
 
 
@@ -21,12 +18,18 @@ sheetid = os.getenv("GSHEET_ID")
 def get_gsheet():
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
 
+    service_account_info = json.loads(
+        os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+    )
+
     creds = Credentials.from_service_account_info(
-        google_secrets,
+        service_account_info,
         scopes=scope
     )
 
     client = gspread.authorize(creds)
+
+    sheetid = os.environ["GSHEET_ID"]
     worksheet = client.open_by_key(sheetid).sheet1
     return worksheet
 
@@ -380,8 +383,8 @@ if cal_state:
             past_nicks = sorted(set(past_nicks), key=lambda s: s)
 
             # 選択肢 + 新規入力をまとめて一箇所で表示
-            nick_choice = st.selectbox("ニックネーム選択または新規登録(文字入力で検索可能)",
-                                    options=["(ニックネーム選択)"] + past_nicks + ["新規登録"], key=f"nick_choice_{idx}")
+            nick_choice = st.selectbox("ニックネーム選択または新規登録",
+                                    options=["(ニックネーム選択または入力)"] + past_nicks + ["新規登録"], key=f"nick_choice_{idx}")
 
             if nick_choice == "新規登録":
                 nick = st.text_input("新しいニックネーム入力", key=f"nick_input_{idx}")
