@@ -6,22 +6,27 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 from google.oauth2 import service_account
+from dotenv import load_dotenv
 
 # ===== Google Sheets 認証 =====
+load_dotenv()
 
-google_secrets = st.secrets["google"]
+google_secrets = json.loads(
+    os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+)
+sheetid = os.getenv("GSHEET_ID")
+
 
 @st.cache_resource(show_spinner=False)
 def get_gsheet():
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
 
     creds = Credentials.from_service_account_info(
-        dict(google_secrets),
+        google_secrets,
         scopes=scope
     )
 
     client = gspread.authorize(creds)
-    sheetid = "1_l57W7GIx1OR56uaWt8OBZ1_Lbr8GtWwS_QfvqFrKp0"
     worksheet = client.open_by_key(sheetid).sheet1
     return worksheet
 
