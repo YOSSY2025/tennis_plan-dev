@@ -10,7 +10,8 @@ import json
 # st.secrets["google"] の中から探すように変更
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
 if not GSHEET_ID:
-    raise RuntimeError("GSHEET_ID が設定されていません")
+    st.error("Secretsの設定エラー: [google] セクション内に GSHEET_ID が見つかりません。")
+    st.stop() # 処理をここで止める
 
 @st.cache_resource(show_spinner=False)
 def get_gsheet(sheet_id):
@@ -27,8 +28,13 @@ def get_gsheet(sheet_id):
     worksheet = client.open_by_key(sheet_id).sheet1
     return worksheet
 
-worksheet = get_gsheet(GSHEET_ID)
-
+try:
+    # ★修正点1の続き：ここでIDを渡す
+    worksheet = get_gsheet(GSHEET_ID)
+except Exception as e:
+    st.error(f"Google Sheetへの接続に失敗しました: {e}")
+    st.stop()
+    
 
 #データ読み込み
 records = worksheet.get_all_records()
