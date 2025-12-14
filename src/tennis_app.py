@@ -22,7 +22,7 @@ def get_gsheet(sheet_id):
         scopes=scope
     )
     client = gspread.authorize(creds)
-    worksheet = client.open_by_key(sheet_id).sheet1
+    worksheet = client.open_by_key(sheet_id).worksheet("reservations")
     return worksheet
 
 try:
