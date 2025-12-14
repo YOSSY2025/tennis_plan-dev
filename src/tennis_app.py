@@ -113,7 +113,114 @@ def to_jst_date(iso_str):
         if isinstance(iso_str, date):
             return iso_str
         return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
-    
+
+# ===== 抽選リマインダー機能 (v2.0) =====
+def check_and_show_reminders():
+    """
+    lottery_periods シートを読み込み、今日が期間内であればメッセージを表示する
+    columns: id, title, frequency, start_month, start_day, end_month, end_day, weekdays, messages, enabled
+    """
+    try:
+        # シート接続（キャッシュせず毎回チェック、または短時間キャッシュ）
+        # ※頻繁な変更がないなら @st.cache_data(ttl=600) とかでも良い
+        scope = ["https://www.googleapis.com/auth/spreadsheets"]
+        service_account_info = dict(st.secrets["google"])
+        creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
+        client = gspread.authorize(creds)
+        
+        sheet_id = st.secrets.get("google", {}).get("GSHEET_ID")
+        
+        # シートが存在しない場合のハンドリング
+        try:
+            lottery_sheet = client.open_by_key(sheet_id).worksheet("lottery_periods")
+        except gspread.WorksheetNotFound:
+            # シートがまだなければ何もしない
+            return
+
+        records = lottery_sheet.get_all_records()
+        df = pd.DataFrame(records)
+        
+        if df.empty:
+            return
+
+        # JSTで現在日時を取得
+        jst_now = datetime.utcnow() + timedelta(hours=9)
+        today = jst_now.date()
+        current_month = today.month
+        current_day = today.day
+        current_weekday = today.strftime("%a") # Mon, Tue, ...
+
+        messages_to_show = []
+
+        for _, row in df.iterrows():
+            # 1. 有効フラグチェック (TRUE, true, 1, などの場合有効)
+            enabled_val = str(row.get("enabled", "")).lower()
+            if enabled_val not in ["true", "1", "yes", "有効"]:
+                continue
+
+            freq = row.get("frequency", "")
+            msg = row.get("messages", "")
+            if not msg:
+                continue
+
+            is_match = False
+            
+            try:
+                # --- 毎月 (monthly) ---
+                if freq == "monthly":
+                    s_day = int(row.get("start_day", 0))
+                    e_day = int(row.get("end_day", 32))
+                    # 日付が範囲内か
+                    if s_day <= current_day <= e_day:
+                        is_match = True
+
+                # --- 毎週 (weekly) ---
+                elif freq == "weekly":
+                    # "Mon,Thu" のような文字列を想定
+                    target_wds = str(row.get("weekdays", ""))
+                    if current_weekday in target_wds:
+                        is_match = True
+
+                # --- 毎年 (yearly) ---
+                elif freq == "yearly":
+                    s_month = int(row.get("start_month", 0))
+                    s_day = int(row.get("start_day", 0))
+                    e_month = int(row.get("end_month", 0))
+                    e_day = int(row.get("end_day", 0))
+
+                    if s_month > 0 and e_month > 0:
+                        # 期間開始日と終了日を datetime オブジェクト（年は現在）で比較用に作成
+                        start_date = date(today.year, s_month, s_day)
+                        end_date = date(today.year, e_month, e_day)
+
+                        # 年をまたぐ場合（例: 12月〜1月）の対応
+                        if start_date > end_date:
+                            # 今日が「開始日以降」または「終了日以前」ならOK
+                            if today >= start_date or today <= end_date:
+                                is_match = True
+                        else:
+                            # 通常の期間（例: 5月〜6月）
+                            if start_date <= today <= end_date:
+                                is_match = True
+
+            except Exception as e:
+                # データ変換エラー等はスキップ
+                print(f"Reminder Check Error row: {e}")
+                continue
+
+            if is_match:
+                messages_to_show.append(msg)
+
+        # メッセージ表示
+        if messages_to_show:
+            for m in messages_to_show:
+                # 目立つように info または warning で表示
+                st.info(f"🔔 **お知らせ**: {m}", icon="📢")
+
+    except Exception as e:
+        print(f"Reminder Error: {e}")
+
+
 # ===== CSS設定 =====
 st.markdown("""
 <style>
@@ -126,6 +233,9 @@ st.markdown("""
 
 # ===== タイトル =====
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
+
+# リマインダー表示を実行
+check_and_show_reminders()
 
 # ===== データ読み込み =====
 df_res = load_reservations()
