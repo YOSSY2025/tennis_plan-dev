@@ -9,10 +9,7 @@ from google.oauth2 import service_account
 from dotenv import load_dotenv
 
 # ===== Google Sheets 認証 =====
-load_dotenv()
-
-sheetid = os.getenv("GSHEET_ID")
-
+GSHEET_ID=st.secrets["GSHEET_ID"]
 
 @st.cache_resource(show_spinner=False)
 def get_gsheet():
@@ -29,7 +26,7 @@ def get_gsheet():
 
     client = gspread.authorize(creds)
 
-    sheetid = os.environ["GSHEET_ID"]
+    sheetid = GSHEET_ID
     worksheet = client.open_by_key(sheetid).sheet1
     return worksheet
 
