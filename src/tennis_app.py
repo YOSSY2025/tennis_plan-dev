@@ -5,19 +5,17 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-from google.oauth2 import service_account
-from dotenv import load_dotenv
 
 # ===== Google Sheets 認証 =====
-GSHEET_ID=st.secrets["GSHEET_ID"]
+GSHEET_ID = st.secrets.get("GSHEET_ID")
+if not GSHEET_ID:
+    raise RuntimeError("GSHEET_ID が設定されていません")
 
 @st.cache_resource(show_spinner=False)
 def get_gsheet():
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
 
-    service_account_info = json.loads(
-        os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-    )
+    service_account_info = dict(st.secrets["google"])
 
     creds = Credentials.from_service_account_info(
         service_account_info,
@@ -25,9 +23,7 @@ def get_gsheet():
     )
 
     client = gspread.authorize(creds)
-
-    sheetid = GSHEET_ID
-    worksheet = client.open_by_key(sheetid).sheet1
+    worksheet = client.open_by_key(GSHEET_ID).sheet1
     return worksheet
 
 worksheet = get_gsheet()
