@@ -7,19 +7,24 @@ from google.oauth2.service_account import Credentials
 import json
 
 # ===== Google Sheets 認証 =====
-GSHEET_ID = st.secrets.get("GSHEET_ID")
-if not GSHEET_ID:
-    raise RuntimeError("GSHEET_ID が設定されていません")
+GSHEET_ID = None
+try:
+    GSHEET_ID = st.secrets.get("GSHEET_ID") if hasattr(st, "secrets") else None
+except Exception:
+    GSHEET_ID = None
 
+if not GSHEET_ID:
+    GSHEET_ID = os.getenv("GSHEET_ID")
+
+if not GSHEET_ID:
+    st.error("設定エラー: GSHEET_ID が設定されていません。Manage app → Secrets を確認するか環境変数 GSHEET_ID を設定してください。")
+    st.stop()
+    
 @st.cache_resource(show_spinner=False)
 def get_gsheet():
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
 
     service_account_info = dict(st.secrets["google"])
-
-    # ← 追加: Secrets に格納された private_key の '\n' エスケープを復元
-    if "private_key" in service_account_info and isinstance(service_account_info["private_key"], str):
-        service_account_info["private_key"] = service_account_info["private_key"].replace("\\n", "\n")
 
     creds = Credentials.from_service_account_info(
         service_account_info,
