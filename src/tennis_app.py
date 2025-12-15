@@ -234,6 +234,36 @@ st.markdown("""
 # ===== タイトル =====
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
 
+# === デバッグ用コード (確認後削除してください) ===
+try:
+    st.write("--- DEBUG INFO ---")
+    st.write(f"Sheet ID: {GSHEET_ID}")
+    
+    # シート接続テスト
+    ws_debug = get_gsheet(GSHEET_ID, "reservations")
+    st.write("✅ reservations シート接続OK")
+    
+    # データ取得テスト
+    data_debug = ws_debug.get_all_records()
+    df_debug = pd.DataFrame(data_debug)
+    st.write(f"データ件数: {len(df_debug)}")
+    
+    if not df_debug.empty:
+        st.write("▼ データの先頭5件")
+        st.dataframe(df_debug.head())
+        st.write("▼ カラム名一覧")
+        st.write(list(df_debug.columns))
+    else:
+        st.warning("データが空です。ヘッダー行はありますか？")
+        
+    st.write("--- DEBUG END ---")
+except Exception as e:
+    st.error(f"❌ 接続エラー詳細: {e}")
+# ==========================================
+
+
+
+
 # リマインダー表示を実行
 check_and_show_reminders()
 
