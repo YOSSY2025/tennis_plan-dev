@@ -310,45 +310,12 @@ status_color = {
 
 events = []
 for idx, r in df_res.iterrows():
-    # 1. 日付の安全な取得
-    raw_date = r.get("date")
-    if pd.isna(raw_date) or raw_date == "":
-        continue
-    
-    # 文字列なら日付型に変換、すでに日付型ならそのまま使う
-    if isinstance(raw_date, str):
-        try:
-            # ISOフォーマットなどを想定して変換
-            curr_date = datetime.fromisoformat(str(raw_date)[:10]).date()
-        except:
-            continue # 変換できない変なデータはスキップ
-    elif isinstance(raw_date, (date, datetime, pd.Timestamp)):
-        curr_date = raw_date
-    else:
+    if pd.isna(r["date"]):
         continue
 
-    # 2. 時間の安全な取得（ここがエラーの原因候補）
-    def safe_int(val, default=0):
-        try:
-            # NaNやNoneの場合はエラーになるのでキャッチして0にする
-            if pd.isna(val) or val == "":
-                return default
-            return int(float(val)) # "9.0" のような文字列やfloatも考慮して一度floatにする
-        except:
-            return default
-
-    s_hour = safe_int(r.get("start_hour"), 9)
-    s_min  = safe_int(r.get("start_minute"), 0)
-    e_hour = safe_int(r.get("end_hour"), 11)
-    e_min  = safe_int(r.get("end_minute"), 0)
-
-    # 3. datetime結合
-    try:
-        start_dt = datetime.combine(curr_date, time(s_hour, s_min))
-        end_dt   = datetime.combine(curr_date, time(e_hour, e_min))
-    except Exception as e:
-        print(f"Skipping event {idx}: {e}")
-        continue
+    # 時間計算
+    start_dt = datetime.combine(r["date"], time(int(r.get("start_hour",0)), int(r.get("start_minute",0))))
+    end_dt   = datetime.combine(r["date"], time(int(r.get("end_hour",0)), int(r.get("end_minute",0))))
 
     color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
     title_str = f"{r['status']} {r['facility']}"
@@ -362,6 +329,7 @@ for idx, r in df_res.iterrows():
         "borderColor": color["bg"],
         "textColor": color["text"]
     })
+
 
 # ===== カレンダー表示 =====
 cal_state = calendar(
