@@ -5,6 +5,8 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import time
+from gspread.exceptions import APIError
 
 # ===== Google Sheets 認証 =====
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
@@ -38,6 +40,11 @@ except Exception as e:
 # ★追加: ttl=15 (15秒間はキャッシュを使う)
 @st.cache_data(ttl=15)
 def load_reservations():
+    # ★修正: リトライ関数経由でデータを取得
+    data = run_with_retry(worksheet.get_all_records)
+
+    df = pd.DataFrame(data)
+
     # 常に最新を取得
     # ★注意: キャッシュを使うため、worksheet変数はグローバルか引数で渡す必要がありますが、
     # 今の構成ならそのままで動きます。
@@ -113,10 +120,9 @@ def save_reservations(df):
     ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
-    # Google Sheets にアップデート（全書き換え）
-    worksheet.clear()
-    worksheet.update(values)
-
+    # ★修正: 書き込み処理をリトライ関数経由にする
+    run_with_retry(worksheet.clear)
+    run_with_retry(worksheet.update, values)
 
     #追加：保存したら古いキャッシュを削除する
     load_reservations.clear()
@@ -131,6 +137,37 @@ def to_jst_date(iso_str):
         if isinstance(iso_str, date):
             return iso_str
         return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
+
+# ===== API制限対策: リトライ実行関数 =====
+def run_with_retry(func, *args, **kwargs):
+    """
+    Google Sheets APIがエラー(429等)を返した場合、
+    少し待機してから再試行するラッパー関数
+    """
+    max_retries = 5  # 最大5回まで再試行
+    for i in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except APIError as e:
+            # 最後の1回でダメならエラーを吐く
+            if i == max_retries - 1:
+                raise e
+            
+            # エラーコードを確認 (429:Too Many Requests, 500系:Server Error)
+            code = e.response.status_code
+            if code == 429 or code >= 500:
+                wait_time = 2 ** (i + 1)  # 2秒, 4秒, 8秒, 16秒...と待機時間を増やす
+                # ユーザーには見えないログとして出力
+                print(f"API Limit reached. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                # 認証エラーなどは待っても直らないのでそのままエラーにする
+                raise e
+        except Exception as e:
+            # その他のネットワークエラーなども一旦リトライしてみる
+            if i == max_retries - 1:
+                raise e
+            time.sleep(2)
 
 # ===== 抽選リマインダー機能 (v2.0) =====
 def check_and_show_reminders():
@@ -155,7 +192,7 @@ def check_and_show_reminders():
             # シートがまだなければ何もしない
             return
 
-        records = lottery_sheet.get_all_records()
+        records = run_with_retry(lottery_sheet.get_all_records())
         df = pd.DataFrame(records)
         
         if df.empty:
