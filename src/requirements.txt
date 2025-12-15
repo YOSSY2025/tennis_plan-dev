@@ -1,2 +1,2 @@
-streamlit-calendar
+streamlit_calendar
 gspread
