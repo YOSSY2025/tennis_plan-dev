@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
-from datetime import time as dt_time  # ★時間を扱うクラスを 'dt_time' という別名にする
+# ★重要: 時間を扱うクラスを 'dt_time' という別名にして、下の time モジュールと区別する
+from datetime import time as dt_time  
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time  # ★待機処理用のモジュールはそのまま 'time'
+import time  # ★重要: API待機用のモジュール（こちらを 'time' として使う）
 from gspread.exceptions import APIError
 
 # ==========================================
@@ -16,25 +17,25 @@ from gspread.exceptions import APIError
 # API制限対策: エラーが出たら少し待って再試行する関数
 def run_with_retry(func, *args, **kwargs):
     """
-    func: 実行したい関数（()をつけずに渡すこと）
-    args/kwargs: その関数に渡す引数
+    func: 実行したい関数オブジェクト（()をつけずに渡すこと）
     """
     max_retries = 5
     for i in range(max_retries):
         try:
+            # ここで関数を実行
             return func(*args, **kwargs)
         except APIError as e:
             if i == max_retries - 1: raise e
             code = e.response.status_code
             if code == 429 or code >= 500:
-                time.sleep(2 ** (i + 1)) # timeモジュールを使用
+                time.sleep(2 ** (i + 1)) # timeモジュールで待機
             else:
                 raise e
         except Exception as e:
             if i == max_retries - 1: raise e
             time.sleep(2)
 
-# 安全な数値変換（エラー防止用）
+# 安全な数値変換
 def safe_int(val, default=0):
     try:
         if pd.isna(val) or val == "": return default
@@ -83,7 +84,7 @@ except Exception as e:
 # ★高速化: 15秒間キャッシュ
 @st.cache_data(ttl=15)
 def load_reservations():
-    # リトライ経由で取得（()をつけずにメソッドを渡す）
+    # リトライ経由で取得（()をつけずに渡す）
     data = run_with_retry(worksheet.get_all_records)
     df = pd.DataFrame(data)
 
@@ -245,7 +246,7 @@ for idx, r in df_res.iterrows():
     e_min  = safe_int(r.get("end_minute"), 0)
 
     try:
-        # ★ここで dt_time を使用 (timeだとエラーになる)
+        # ★重要: ここで dt_time を使用 (time だとエラーになります)
         start_dt = datetime.combine(curr_date, dt_time(s_hour, s_min))
         end_dt   = datetime.combine(curr_date, dt_time(e_hour, e_min))
     except Exception: continue
@@ -316,7 +317,7 @@ if cal_state:
         status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
 
         st.markdown("**開始時間**")
-        # ★ここも dt_time を使用
+        # ★重要: ここも dt_time を使用
         start_time = st.time_input("", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
         
         st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
