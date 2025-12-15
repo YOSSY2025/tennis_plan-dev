@@ -5,8 +5,6 @@ from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time
-from gspread.exceptions import APIError
 
 # ===== Google Sheets 認証 =====
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
@@ -35,29 +33,9 @@ except Exception as e:
 
 
 # ===== Google Sheets 読み書き関数 =====
-# ===== (修正) Google Sheets 読み書き関数 =====
-
-# ★追加: ttl=15 (15秒間はキャッシュを使う)
-@st.cache_data(ttl=15)
 def load_reservations():
-    # ★修正: リトライ関数経由でデータを取得
-    data = run_with_retry(worksheet.get_all_records)
-
-    df = pd.DataFrame(data)
-
     # 常に最新を取得
-    # ★注意: キャッシュを使うため、worksheet変数はグローバルか引数で渡す必要がありますが、
-    # 今の構成ならそのままで動きます。
-    
-    # エラーハンドリングを追加して、万が一の通信エラー時も再試行させるとなお良し
-    try:
-        data = worksheet.get_all_records()
-    except Exception:
-        # 一瞬待って再トライなどの処理を入れることも可能ですが、
-        # まずはキャッシュで回数を減らすのが先決
-        st.cache_data.clear() # エラーならキャッシュクリアして次回再取得
-        raise 
-
+    data = worksheet.get_all_records()
     df = pd.DataFrame(data)
 
     # 期待されるカラム（consider を含む）
@@ -67,6 +45,7 @@ def load_reservations():
     ]
     for c in expected_cols:
         if c not in df.columns:
+            # カラムがなければ空文字で作成
             df[c] = ""
 
     # 日付パース
@@ -120,12 +99,9 @@ def save_reservations(df):
     ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
-    # ★修正: 書き込み処理をリトライ関数経由にする
-    run_with_retry(worksheet.clear)
-    run_with_retry(worksheet.update, values)
-
-    #追加：保存したら古いキャッシュを削除する
-    load_reservations.clear()
+    # Google Sheets にアップデート（全書き換え）
+    worksheet.clear()
+    worksheet.update(values)
 
 # ===== JST変換関数 =====
 def to_jst_date(iso_str):
@@ -137,37 +113,6 @@ def to_jst_date(iso_str):
         if isinstance(iso_str, date):
             return iso_str
         return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
-
-# ===== API制限対策: リトライ実行関数 =====
-def run_with_retry(func, *args, **kwargs):
-    """
-    Google Sheets APIがエラー(429等)を返した場合、
-    少し待機してから再試行するラッパー関数
-    """
-    max_retries = 5  # 最大5回まで再試行
-    for i in range(max_retries):
-        try:
-            return func(*args, **kwargs)
-        except APIError as e:
-            # 最後の1回でダメならエラーを吐く
-            if i == max_retries - 1:
-                raise e
-            
-            # エラーコードを確認 (429:Too Many Requests, 500系:Server Error)
-            code = e.response.status_code
-            if code == 429 or code >= 500:
-                wait_time = 2 ** (i + 1)  # 2秒, 4秒, 8秒, 16秒...と待機時間を増やす
-                # ユーザーには見えないログとして出力
-                print(f"API Limit reached. Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-            else:
-                # 認証エラーなどは待っても直らないのでそのままエラーにする
-                raise e
-        except Exception as e:
-            # その他のネットワークエラーなども一旦リトライしてみる
-            if i == max_retries - 1:
-                raise e
-            time.sleep(2)
 
 # ===== 抽選リマインダー機能 (v2.0) =====
 def check_and_show_reminders():
@@ -192,7 +137,7 @@ def check_and_show_reminders():
             # シートがまだなければ何もしない
             return
 
-        records = run_with_retry(lottery_sheet.get_all_records())
+        records = lottery_sheet.get_all_records()
         df = pd.DataFrame(records)
         
         if df.empty:
@@ -295,11 +240,6 @@ check_and_show_reminders()
 # ===== データ読み込み =====
 df_res = load_reservations()
 
-# ★追加: キャッシュから読み込んだ際に「文字列」になっている日付データを「日付型」に戻す処理
-if not df_res.empty and "date" in df_res.columns:
-    df_res["date"] = pd.to_datetime(df_res["date"], errors="coerce").dt.date
-
-
 # ===== カレンダーイベント生成 =====
 status_color = {
     "確保": {"bg":"#90ee90","text":"black"},
@@ -310,45 +250,12 @@ status_color = {
 
 events = []
 for idx, r in df_res.iterrows():
-    # 1. 日付の安全な取得
-    raw_date = r.get("date")
-    if pd.isna(raw_date) or raw_date == "":
-        continue
-    
-    # 文字列なら日付型に変換、すでに日付型ならそのまま使う
-    if isinstance(raw_date, str):
-        try:
-            # ISOフォーマットなどを想定して変換
-            curr_date = datetime.fromisoformat(str(raw_date)[:10]).date()
-        except:
-            continue # 変換できない変なデータはスキップ
-    elif isinstance(raw_date, (date, datetime, pd.Timestamp)):
-        curr_date = raw_date
-    else:
+    if pd.isna(r["date"]):
         continue
 
-    # 2. 時間の安全な取得（ここがエラーの原因候補）
-    def safe_int(val, default=0):
-        try:
-            # NaNやNoneの場合はエラーになるのでキャッチして0にする
-            if pd.isna(val) or val == "":
-                return default
-            return int(float(val)) # "9.0" のような文字列やfloatも考慮して一度floatにする
-        except:
-            return default
-
-    s_hour = safe_int(r.get("start_hour"), 9)
-    s_min  = safe_int(r.get("start_minute"), 0)
-    e_hour = safe_int(r.get("end_hour"), 11)
-    e_min  = safe_int(r.get("end_minute"), 0)
-
-    # 3. datetime結合
-    try:
-        start_dt = datetime.combine(curr_date, time(s_hour, s_min))
-        end_dt   = datetime.combine(curr_date, time(e_hour, e_min))
-    except Exception as e:
-        print(f"Skipping event {idx}: {e}")
-        continue
+    # 時間計算
+    start_dt = datetime.combine(r["date"], time(int(r.get("start_hour",0)), int(r.get("start_minute",0))))
+    end_dt   = datetime.combine(r["date"], time(int(r.get("end_hour",0)), int(r.get("end_minute",0))))
 
     color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
     title_str = f"{r['status']} {r['facility']}"
@@ -362,6 +269,7 @@ for idx, r in df_res.iterrows():
         "borderColor": color["bg"],
         "textColor": color["text"]
     })
+
 
 # ===== カレンダー表示 =====
 cal_state = calendar(
@@ -485,14 +393,13 @@ if cal_state:
             ステータス: {r['status']}<br>
             時間:<br> &nbsp;&nbsp;{int(r['start_hour']):02d}:{int(r['start_minute']):02d} - {int(r['end_hour']):02d}:{int(r['end_minute']):02d}<br>
             参加者:<br> &nbsp;&nbsp;{', '.join(r['participants']) if r['participants'] else 'なし'}<br>
-            不参加:<br> &nbsp;&nbsp;{', '.join(r['absent']) if r['absent'] else 'なし'}<br>
             保留:<br> &nbsp;&nbsp;{', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ:<br> &nbsp;&nbsp;{r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
             """, unsafe_allow_html=True)
 
             # ---- ニックネーム入力 ----
             past_nicks = []
-            # 参加・不参加・保留 の全リストからニックネーム履歴を取得
+            # 参加・保留 の全リストからニックネーム履歴を取得
             for col in ["participants", "absent", "consider"]:
                 if col in df_res.columns:
                     for lst in df_res[col]:
@@ -517,7 +424,7 @@ if cal_state:
                 nick = nick_choice
         
             # ラジオボタンに「保留」を追加
-            part = st.radio("参加状況", ["参加", "不参加", "保留", "削除"], key=f"part_{idx}")
+            part = st.radio("参加状況", ["参加", "保留", "削除"], key=f"part_{idx}")
 
             if st.button("反映", key=f"apply_{idx}"):
                 if not nick:
@@ -536,8 +443,6 @@ if cal_state:
                     # 2. 選択されたリストへ追加
                     if part == "参加":
                         participants.append(nick)
-                    elif part == "不参加":
-                        absent.append(nick)
                     elif part == "保留":
                         consider.append(nick)
                     # 削除の場合は何もしない
