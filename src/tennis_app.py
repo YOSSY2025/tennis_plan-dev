@@ -33,9 +33,24 @@ except Exception as e:
 
 
 # ===== Google Sheets 読み書き関数 =====
+# ===== (修正) Google Sheets 読み書き関数 =====
+
+# ★追加: ttl=15 (15秒間はキャッシュを使う)
+@st.cache_data(ttl=15)
 def load_reservations():
     # 常に最新を取得
-    data = worksheet.get_all_records()
+    # ★注意: キャッシュを使うため、worksheet変数はグローバルか引数で渡す必要がありますが、
+    # 今の構成ならそのままで動きます。
+    
+    # エラーハンドリングを追加して、万が一の通信エラー時も再試行させるとなお良し
+    try:
+        data = worksheet.get_all_records()
+    except Exception:
+        # 一瞬待って再トライなどの処理を入れることも可能ですが、
+        # まずはキャッシュで回数を減らすのが先決
+        st.cache_data.clear() # エラーならキャッシュクリアして次回再取得
+        raise 
+
     df = pd.DataFrame(data)
 
     # 期待されるカラム（consider を含む）
@@ -45,7 +60,6 @@ def load_reservations():
     ]
     for c in expected_cols:
         if c not in df.columns:
-            # カラムがなければ空文字で作成
             df[c] = ""
 
     # 日付パース
@@ -102,6 +116,10 @@ def save_reservations(df):
     # Google Sheets にアップデート（全書き換え）
     worksheet.clear()
     worksheet.update(values)
+
+
+    #追加：保存したら古いキャッシュを削除する
+    load_reservations.clear()
 
 # ===== JST変換関数 =====
 def to_jst_date(iso_str):
