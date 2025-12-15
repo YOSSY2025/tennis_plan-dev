@@ -295,6 +295,11 @@ check_and_show_reminders()
 # ===== データ読み込み =====
 df_res = load_reservations()
 
+# ★追加: キャッシュから読み込んだ際に「文字列」になっている日付データを「日付型」に戻す処理
+if not df_res.empty and "date" in df_res.columns:
+    df_res["date"] = pd.to_datetime(df_res["date"], errors="coerce").dt.date
+
+
 # ===== カレンダーイベント生成 =====
 status_color = {
     "確保": {"bg":"#90ee90","text":"black"},
