@@ -358,7 +358,6 @@ with tab_calendar:
 # === タブ2: 予約リスト表示 ===
 with tab_list:
     # --- フィルタ設定エリア ---
-    # keyを設定してリセットを防ぐ
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     
     # 表示用にデータを整形
@@ -389,10 +388,9 @@ with tab_list:
         df_list['参加者'] = df_list['participants'].apply(format_list_col)
         df_list['保留'] = df_list['consider'].apply(format_list_col)
 
-        # 4. 日付に曜日を追加する (例: 2025-12-21 (日))
+        # 4. 日付に曜日を追加する
         def format_date_with_weekday(d):
             if not isinstance(d, (date, datetime)): return str(d)
-            # 日本語の曜日リスト
             weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
             wd = weekdays[d.weekday()]
             return f"{d.strftime('%Y-%m-%d')} {wd}"
@@ -420,47 +418,42 @@ with tab_list:
 
         df_display = df_list[final_cols].rename(columns=rename_dict)
         
-        # 日付順にソート
         if '日付' in df_display.columns:
             df_display = df_display.sort_values('日付', ascending=True)
 
-        # 6. 表を表示 & クリック検知
-        # keyを設定して、再描画時の挙動を安定させる
+        # 6. 表を表示（カラム幅を最適化）
         event_selection = st.dataframe(
             df_display,
-            use_container_width=True,
-            hide_index=True,  # 行番号を隠してスッキリさせる
+            use_container_width=True, # 画面いっぱいには広げる
+            hide_index=True,
             on_select="rerun",
-            selection_mode="single-row",  # これがあるため、左端に選択ボタンが出るのは仕様です
-            key="reservation_list_table", # ★重要：これでタブ切り替えやフィルタ時の動作を安定させる
+            selection_mode="single-row",
+            key="reservation_list_table",
             column_config={
-                "日付": st.column_config.TextColumn(width="medium"),
-                "時間": st.column_config.TextColumn(width="small"),
-                "施設": st.column_config.TextColumn(width="medium"),
-                "状態": st.column_config.TextColumn(width="small"),
-                "参加者": st.column_config.TextColumn(width="medium"),
-                "保留": st.column_config.TextColumn(width="medium"),
-                "メモ": st.column_config.TextColumn(width="large"),
+                # widthは small, medium, large またはピクセル指定が可能
+                "日付": st.column_config.TextColumn("日付", width="medium"), # 曜日が入るのでmedium
+                "時間": st.column_config.TextColumn("時間", width="small"),  # 短いのでsmall
+                "施設": st.column_config.TextColumn("施設", width="medium"),
+                "状態": st.column_config.TextColumn("状態", width="small"),  # 2文字なのでsmall
+                "参加者": st.column_config.TextColumn("参加者", width="large"), # 名前が並ぶのでlarge
+                "保留": st.column_config.TextColumn("保留", width="medium"),  # そこそこ長い
+                "メモ": st.column_config.TextColumn("メモ", width="large"),   # 長文用
             }
         )
         
-        # クリックされたらIDを保存
         if len(event_selection.selection.rows) > 0:
             selected_row_idx = event_selection.selection.rows[0]
-            # 表示されている行に対応する、元のデータのID(index)を探す
             actual_idx = df_display.index[selected_row_idx]
             
-            # 選択が変わった時だけ更新（無限リロード防止）
             if st.session_state.get('active_event_idx') != actual_idx:
                 st.session_state['active_event_idx'] = actual_idx
-                # カレンダーの月も連動させる
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
-                st.rerun() # 即座に反映して編集フォームを出す
+                st.rerun()
 
     else:
         st.info("表示できる予約データがありません。")
-        
+                
 # ==========================================
 # 6. イベントハンドリング（カレンダー操作）
 # ==========================================
