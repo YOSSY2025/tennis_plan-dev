@@ -1,29 +1,34 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
+# ★重要: 時間を扱うクラスを 'dt_time' という別名にして、下の time モジュールと区別する
 from datetime import time as dt_time  
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time
+import time  # ★重要: API待機用のモジュール（こちらを 'time' として使う）
 from gspread.exceptions import APIError
 
 # ==========================================
-# 1. 共通関数・設定
+# 1. 共通関数・設定 (高速化・安定化用)
 # ==========================================
 
-# API制限対策: リトライ実行関数
+# API制限対策: エラーが出たら少し待って再試行する関数
 def run_with_retry(func, *args, **kwargs):
+    """
+    func: 実行したい関数オブジェクト（()をつけずに渡すこと）
+    """
     max_retries = 5
     for i in range(max_retries):
         try:
+            # ここで関数を実行
             return func(*args, **kwargs)
         except APIError as e:
             if i == max_retries - 1: raise e
             code = e.response.status_code
             if code == 429 or code >= 500:
-                time.sleep(2 ** (i + 1))
+                time.sleep(2 ** (i + 1)) # timeモジュールで待機
             else:
                 raise e
         except Exception as e:
@@ -54,6 +59,7 @@ if not GSHEET_ID:
     st.error("Secretsの設定エラー: [google] セクション内に GSHEET_ID が見つかりません。")
     st.stop()
 
+# 接続用キャッシュ
 @st.cache_resource(show_spinner=False)
 def get_gsheet(sheet_id, sheet_name):
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -63,6 +69,7 @@ def get_gsheet(sheet_id, sheet_name):
     worksheet = client.open_by_key(sheet_id).worksheet(sheet_name)
     return worksheet
 
+# メインシート接続
 try:
     worksheet = get_gsheet(GSHEET_ID, "reservations")
 except Exception as e:
@@ -74,8 +81,10 @@ except Exception as e:
 # 2. データ読み書き（高速化対応）
 # ==========================================
 
+# ★高速化: 15秒間キャッシュ
 @st.cache_data(ttl=15)
 def load_reservations():
+    # リトライ経由で取得（()をつけずに渡す）
     data = run_with_retry(worksheet.get_all_records)
     df = pd.DataFrame(data)
 
@@ -87,8 +96,10 @@ def load_reservations():
         if c not in df.columns:
             df[c] = ""
 
+    # 日付パース
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
+    # リスト変換
     def _to_list_cell(x):
         if isinstance(x, (list, tuple)): return list(x)
         if pd.isna(x) or x == "": return []
@@ -103,13 +114,16 @@ def load_reservations():
 def save_reservations(df):
     df_to_save = df.copy()
     
+    # リスト→文字列
     for col in ["participants", "absent", "consider"]:
         if col in df_to_save.columns:
             df_to_save[col] = df_to_save[col].apply(lambda lst: ";".join(lst) if isinstance(lst, (list, tuple)) else (lst if pd.notnull(lst) else ""))
 
+    # 日付→ISO文字列
     if "date" in df_to_save.columns:
         df_to_save["date"] = df_to_save["date"].apply(lambda d: d.isoformat() if isinstance(d, (date, datetime, pd.Timestamp)) else (str(d) if pd.notnull(d) else ""))
 
+    # NaN削除
     df_to_save = df_to_save.where(pd.notnull(df_to_save), "")
 
     def _serialize_cell(v):
@@ -121,73 +135,71 @@ def save_reservations(df):
     ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
+    # ★リトライ経由で書き込み & キャッシュクリア
     run_with_retry(worksheet.clear)
     run_with_retry(worksheet.update, values)
     load_reservations.clear()
 
 
 # ==========================================
-# 3. 抽選リマインダー (爆速化対応)
+# 3. 抽選リマインダー (v2.0)
 # ==========================================
-
-# ★高速化のキモ: リマインダー情報は頻繁に変わらないので、1時間(3600秒)キャッシュする
-@st.cache_data(ttl=3600)
-def load_lottery_data():
-    try:
-        lottery_sheet = get_gsheet(GSHEET_ID, "lottery_periods")
-        records = run_with_retry(lottery_sheet.get_all_records)
-        return pd.DataFrame(records)
-    except Exception:
-        return pd.DataFrame()
-
 def check_and_show_reminders():
-    # キャッシュされた関数を呼ぶだけなので、ここは一瞬で終わる
-    df = load_lottery_data()
-    
-    if df.empty: return
-
-    jst_now = datetime.utcnow() + timedelta(hours=9)
-    today = jst_now.date()
-    current_day = today.day
-    current_weekday = today.strftime("%a")
-
-    messages_to_show = []
-
-    for _, row in df.iterrows():
-        enabled_val = str(row.get("enabled", "")).lower()
-        if enabled_val not in ["true", "1", "yes", "有効"]: continue
-
-        freq = row.get("frequency", "")
-        msg = row.get("messages", "")
-        if not msg: continue
-
-        is_match = False
+    try:
         try:
-            if freq == "monthly":
-                s_day = int(row.get("start_day", 0))
-                e_day = int(row.get("end_day", 32))
-                if s_day <= current_day <= e_day: is_match = True
-            elif freq == "weekly":
-                if current_weekday in str(row.get("weekdays", "")): is_match = True
-            elif freq == "yearly":
-                s_month = int(row.get("start_month", 0))
-                s_day = int(row.get("start_day", 0))
-                e_month = int(row.get("end_month", 0))
-                e_day = int(row.get("end_day", 0))
-                if s_month > 0:
-                    start_date = date(today.year, s_month, s_day)
-                    end_date = date(today.year, e_month, e_day)
-                    if start_date > end_date: 
-                        if today >= start_date or today <= end_date: is_match = True
-                    else:
-                        if start_date <= today <= end_date: is_match = True
-        except: continue
+            lottery_sheet = get_gsheet(GSHEET_ID, "lottery_periods")
+        except Exception:
+            return
 
-        if is_match: messages_to_show.append(msg)
+        # リトライ経由で取得
+        records = run_with_retry(lottery_sheet.get_all_records)
+        df = pd.DataFrame(records)
+        if df.empty: return
 
-    if messages_to_show:
-        for m in messages_to_show:
-            st.info(f"🔔 {m}", icon="📢")
+        jst_now = datetime.utcnow() + timedelta(hours=9)
+        today = jst_now.date()
+        current_day = today.day
+        current_weekday = today.strftime("%a")
+
+        messages_to_show = []
+
+        for _, row in df.iterrows():
+            enabled_val = str(row.get("enabled", "")).lower()
+            if enabled_val not in ["true", "1", "yes", "有効"]: continue
+
+            freq = row.get("frequency", "")
+            msg = row.get("messages", "")
+            if not msg: continue
+
+            is_match = False
+            try:
+                if freq == "monthly":
+                    s_day = int(row.get("start_day", 0))
+                    e_day = int(row.get("end_day", 32))
+                    if s_day <= current_day <= e_day: is_match = True
+                elif freq == "weekly":
+                    if current_weekday in str(row.get("weekdays", "")): is_match = True
+                elif freq == "yearly":
+                    s_month = int(row.get("start_month", 0))
+                    s_day = int(row.get("start_day", 0))
+                    e_month = int(row.get("end_month", 0))
+                    e_day = int(row.get("end_day", 0))
+                    if s_month > 0:
+                        start_date = date(today.year, s_month, s_day)
+                        end_date = date(today.year, e_month, e_day)
+                        if start_date > end_date: 
+                            if today >= start_date or today <= end_date: is_match = True
+                        else:
+                            if start_date <= today <= end_date: is_match = True
+            except: continue
+
+            if is_match: messages_to_show.append(msg)
+
+        if messages_to_show:
+            for m in messages_to_show:
+                st.info(f"🔔 {m}", icon=None)
+    except Exception as e:
+        print(f"Reminder Error: {e}")
 
 
 # ==========================================
@@ -216,21 +228,25 @@ status_color = {
 
 events = []
 for idx, r in df_res.iterrows():
+    # 日付データの安全な取り出し
     raw_date = r.get("date")
     if pd.isna(raw_date) or raw_date == "": continue
     
+    # 型チェック強化
     if isinstance(raw_date, str):
         try: curr_date = datetime.fromisoformat(str(raw_date)[:10]).date()
         except: continue
     else:
         curr_date = raw_date
 
+    # 時間データの安全な取り出し
     s_hour = safe_int(r.get("start_hour"), 9)
     s_min  = safe_int(r.get("start_minute"), 0)
     e_hour = safe_int(r.get("end_hour"), 11)
     e_min  = safe_int(r.get("end_minute"), 0)
 
     try:
+        # ★重要: ここで dt_time を使用 (time だとエラーになります)
         start_dt = datetime.combine(curr_date, dt_time(s_hour, s_min))
         end_dt   = datetime.combine(curr_date, dt_time(e_hour, e_min))
     except Exception: continue
@@ -249,16 +265,12 @@ for idx, r in df_res.iterrows():
     })
 
 
-# カレンダー初期位置の固定
-initial_date = datetime.now().strftime("%Y-%m-%d")
-if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
-    initial_date = st.session_state["clicked_date"]
 
+# カレンダー表示
 cal_state = calendar(
     events=events,
     options={
         "initialView": "dayGridMonth",
-        "initialDate": initial_date,
         "selectable": True,
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
         "eventDisplay": "block",
@@ -307,11 +319,12 @@ if cal_state:
         status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
 
         st.markdown("**開始時間**")
-        start_time = st.time_input("開始時間", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        # ★重要: ここも dt_time を使用
+        start_time = st.time_input("", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
         
         st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
         st.markdown("**終了時間**")
-        end_time = st.time_input("終了時間", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        end_time = st.time_input("", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
 
         message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
         message = message_buf.replace('\n', '<br>')    
@@ -367,7 +380,7 @@ if cal_state:
             日付: {event_date}<br>
             施設: {r['facility']}<br>
             ステータス: {r['status']}<br>
-            時間: {int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>
+            時間: {int(safe_int(r['start_hour'])):02d}:{int(safe_int(r['start_minute'])):02d} - {int(safe_int(r['end_hour'])):02d}:{int(safe_int(r['end_minute'])):02d}<br>
             参加: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
             保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
