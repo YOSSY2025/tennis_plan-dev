@@ -432,7 +432,7 @@ with tab_list:
             column_config={
                 # widthは small, medium, large またはピクセル指定が可能
                 "日付": st.column_config.TextColumn("日付", width="small"), # 曜日が入るのでmedium
-                "時間": st.column_config.TextColumn("時間", width="small"),  # 短いのでsmall
+                "時間": st.column_config.TextColumn("時間", width="medium"),  # 短いのでsmall
                 "施設": st.column_config.TextColumn("施設", width="medium"),
                 "状態": st.column_config.TextColumn("状態", width="small"),  # 2文字なのでsmall
                 "参加者": st.column_config.TextColumn("参加者", width="large"), # 名前が並ぶのでlarge
