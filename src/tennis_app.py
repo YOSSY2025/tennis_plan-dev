@@ -323,18 +323,12 @@ for idx, r in df_res.iterrows():
         "textColor": color["text"]
     })
 
-# ★追加 1: 表示する基準日を決める
-# セッションに「クリックした日付」が残っていればそれを使い、なければ今日の日付にする
-initial_date = datetime.now().strftime("%Y-%m-%d")
-if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
-    initial_date = st.session_state["clicked_date"]
 
 # ===== カレンダー表示 =====
 cal_state = calendar(
     events=events,
     options={
         "initialView": "dayGridMonth",
-        "initialDate": initial_date,
         "selectable": True,
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
         "eventDisplay": "block",
@@ -434,9 +428,6 @@ if cal_state:
         ev = cal_state["eventClick"]["event"]
         idx = int(ev["id"])
         
-        if "start" in ev:
-            st.session_state['clicked_date'] = ev["start"]
-
         # スクロール
         st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
         st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
