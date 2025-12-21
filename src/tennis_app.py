@@ -262,7 +262,20 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 
 check_and_show_reminders()
 
+# ===== データ読み込み =====
 df_res = load_reservations()
+
+# ★追加修正: 編集中(active_event_idxあり)なら、カレンダーの日付をそのイベントの日に強制固定する
+# これを「カレンダー描画前」にやることで、確実にその月が表示されます
+if st.session_state.get('active_event_idx') is not None:
+    idx = st.session_state['active_event_idx']
+    # データが存在するか確認
+    if idx in df_res.index:
+        target_date = df_res.loc[idx]["date"]
+        # 日付をセッションに保存（これでカレンダーがここを開く）
+        st.session_state['clicked_date'] = str(target_date)
+
+# ===== カレンダーイベント生成 =====
 
 status_color = {
     "確保": {"bg":"#90ee90","text":"black"},
