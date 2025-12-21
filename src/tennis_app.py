@@ -144,60 +144,105 @@ def save_reservations(df):
 # ==========================================
 # 3. 抽選リマインダー (v2.0)
 # ==========================================
-def check_and_show_reminders():
+
+# ★追加・変更点: リマインダーデータを1時間(3600秒)キャッシュする関数を作成
+# これにより、画面更新のたびに通信が発生するのを防ぎ、動作を軽くする
+@st.cache_data(ttl=3600)
+def load_lottery_data_cached():
     try:
-        try:
-            lottery_sheet = get_gsheet(GSHEET_ID, "lottery_periods")
-        except Exception:
+        # シート接続（ここもリトライ対応）
+        lottery_sheet = get_gsheet(GSHEET_ID, "lottery_periods")
+        records = run_with_retry(lottery_sheet.get_all_records)
+        return pd.DataFrame(records)
+    except Exception:
+        # エラー時は空のデータフレームを返す
+        return pd.DataFrame()
+
+def check_and_show_reminders():
+    """
+    lottery_periods シートを読み込み、今日が期間内であればメッセージを表示する
+    columns: id, title, frequency, start_month, start_day, end_month, end_day, weekdays, messages, enabled
+    """
+    try:
+        # ★変更点: 毎回通信せず、キャッシュ関数からデータを取得する
+        df = load_lottery_data_cached()
+        
+        if df.empty:
             return
 
-        # リトライ経由で取得
-        records = run_with_retry(lottery_sheet.get_all_records)
-        df = pd.DataFrame(records)
-        if df.empty: return
-
+        # JSTで現在日時を取得
         jst_now = datetime.utcnow() + timedelta(hours=9)
         today = jst_now.date()
         current_day = today.day
-        current_weekday = today.strftime("%a")
+        current_weekday = today.strftime("%a") # Mon, Tue, ...
 
         messages_to_show = []
 
         for _, row in df.iterrows():
+            # 1. 有効フラグチェック (TRUE, true, 1, などの場合有効)
             enabled_val = str(row.get("enabled", "")).lower()
-            if enabled_val not in ["true", "1", "yes", "有効"]: continue
+            if enabled_val not in ["true", "1", "yes", "有効"]:
+                continue
 
             freq = row.get("frequency", "")
             msg = row.get("messages", "")
-            if not msg: continue
+            if not msg:
+                continue
 
             is_match = False
+            
             try:
+                # --- 毎月 (monthly) ---
                 if freq == "monthly":
                     s_day = int(row.get("start_day", 0))
                     e_day = int(row.get("end_day", 32))
-                    if s_day <= current_day <= e_day: is_match = True
+                    # 日付が範囲内か
+                    if s_day <= current_day <= e_day:
+                        is_match = True
+
+                # --- 毎週 (weekly) ---
                 elif freq == "weekly":
-                    if current_weekday in str(row.get("weekdays", "")): is_match = True
+                    # "Mon,Thu" のような文字列を想定
+                    target_wds = str(row.get("weekdays", ""))
+                    if current_weekday in target_wds:
+                        is_match = True
+
+                # --- 毎年 (yearly) ---
                 elif freq == "yearly":
                     s_month = int(row.get("start_month", 0))
                     s_day = int(row.get("start_day", 0))
                     e_month = int(row.get("end_month", 0))
                     e_day = int(row.get("end_day", 0))
-                    if s_month > 0:
+
+                    if s_month > 0 and e_month > 0:
+                        # 期間開始日と終了日を datetime オブジェクト（年は現在）で比較用に作成
                         start_date = date(today.year, s_month, s_day)
                         end_date = date(today.year, e_month, e_day)
-                        if start_date > end_date: 
-                            if today >= start_date or today <= end_date: is_match = True
+
+                        # 年をまたぐ場合（例: 12月〜1月）の対応
+                        if start_date > end_date:
+                            # 今日が「開始日以降」または「終了日以前」ならOK
+                            if today >= start_date or today <= end_date:
+                                is_match = True
                         else:
-                            if start_date <= today <= end_date: is_match = True
-            except: continue
+                            # 通常の期間（例: 5月〜6月）
+                            if start_date <= today <= end_date:
+                                is_match = True
 
-            if is_match: messages_to_show.append(msg)
+            except Exception as e:
+                # データ変換エラー等はスキップ
+                print(f"Reminder Check Error row: {e}")
+                continue
 
+            if is_match:
+                messages_to_show.append(msg)
+
+        # メッセージ表示
         if messages_to_show:
             for m in messages_to_show:
-                st.info(f"🔔 {m}", icon=None)
+                # 目立つように info または warning で表示
+                st.info(f"🔔{m}", icon=None)
+
     except Exception as e:
         print(f"Reminder Error: {e}")
 
@@ -265,8 +310,6 @@ for idx, r in df_res.iterrows():
     })
 
 
-
-# カレンダー表示
 cal_state = calendar(
     events=events,
     options={
@@ -363,6 +406,7 @@ if cal_state:
         ev = cal_state["eventClick"]["event"]
         idx = int(ev["id"])
         
+        # ★追加: クリック時の再描画で月が戻らないように日付を記録
         if "start" in ev:
             st.session_state['clicked_date'] = ev["start"]
 
@@ -380,7 +424,7 @@ if cal_state:
             日付: {event_date}<br>
             施設: {r['facility']}<br>
             ステータス: {r['status']}<br>
-            時間: {int(safe_int(r['start_hour'])):02d}:{int(safe_int(r['start_minute'])):02d} - {int(safe_int(r['end_hour'])):02d}:{int(safe_int(r['end_minute'])):02d}<br>
+            時間: {int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>
             参加: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
             保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
