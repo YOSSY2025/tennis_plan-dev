@@ -265,17 +265,12 @@ for idx, r in df_res.iterrows():
     })
 
 
-# セッションに「クリックした日付」が残っていればそれを使い、なければ今日の日付にする
-initial_date = datetime.now().strftime("%Y-%m-%d")
-if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
-    initial_date = st.session_state["clicked_date"]
 
 # カレンダー表示
 cal_state = calendar(
     events=events,
     options={
         "initialView": "dayGridMonth",
-        "initialDate": initial_date,
         "selectable": True,
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
         "eventDisplay": "block",
