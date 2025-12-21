@@ -1,4 +1,6 @@
-# 📘 **UI_FLOW.md — テニス予約管理アプリ UIフロー図**
+# 📘 UI_FLOW.md — テニス予約管理アプリ UIフロー図（v1.3）
+
+---
 
 ---
 
@@ -14,46 +16,59 @@
 
 ---
 
-## 2. 画面遷移図（簡易）
+## 2. 画面遷移図（★更新）
 
-<pre class="overflow-visible!" data-start="466" data-end="934"><div class="contain-inline-size rounded-2xl relative bg-token-sidebar-surface-primary"><div class="sticky top-9"><div class="absolute end-0 bottom-0 flex h-9 items-center pe-2"><div class="bg-token-bg-elevated-secondary text-token-text-secondary flex items-center gap-4 rounded-sm px-2 font-sans text-xs"></div></div></div><div class="overflow-y-auto p-4" dir="ltr"><code class="whitespace-pre!"><span><span>┌────────────────────────┐
-│         TopView（トップ）        │
-│  ・カレンダー（月表示）          │
-│  ・当月予約一覧                  │
-│  ・抽選期間リマインダー          │
-└───────┬───────────────┘
-            │（日付 or イベント選択）
-            ▼
-┌────────────────────────┐
-│ RegisterReservationView（予約登録）│
-└───────┬───────────────┘
-            │（登録完了）
-            ▼
-   ○ TopView に戻る
-
-
-</span><span>From</span><span> TopViewのボタン操作
----------------------------------
-</span><span>[参加表明]</span><span> → EntryView
-</span><span>[施設登録]</span><span> → FacilityView
-</span><span>[履歴]</span><span> → HistoryView
-</span></span></code></div></div></pre>
+```text
+┌─────────────────────────────────┐
+│      Main Screen (Header)       │
+│  [リマインダー通知エリア]       │
+├─────────────────────────────────┤
+│ Tab 1: [📅 カレンダー]          │
+│ Tab 2: [📋 予約リスト]          │
+└───────┬─────────────────┬───────┘
+        │                 │
+        │ (クリック)      │ (クリック)
+        ▼                 ▼
+┌─────────────────────────────────┐
+│  【ポップアップダイアログ】     │
+│                                 │
+│  [ 新規登録 / 編集フォーム ]    │
+│  ・日付/時間/施設/ステータス    │
+│  ・参加者/保留/メモ             │
+│                                 │
+│  [ 登録 / 反映 ] [ 削除 ]       │
+└─────────────────────────────────┘
+        │
+        │ (保存して閉じる)
+        ▼
+   ○ Main Screen に戻る（データ更新）
+```
 
 ---
 
 ## 3. TopView（トップ画面）
 
-### ● UI構成
-
-* カレンダー（月次）
-  * PC：左右ボタンで月移動
-  * スマホ：**左右スワイプで月移動（新規追加）**
-* 抽選期間リマインダー（固定文言／複数表示可）
-* 当月の予約一覧（カード形式）
-* 予約一覧のイベントタップ → 自動で **参加表明画面**へ遷移（新規仕様）
-* 日付をタップ → **予約登録画面**へ遷移（新規仕様）
-
 ---
+
+### ● タブ構成
+
+* **カレンダータブ**
+
+  * **月表示カレンダー**
+  * **同月内の日付移動では再描画を行わない（スムーズな挙動）**
+* **予約リストタブ**
+
+  * **全予約のリスト表示**
+  * **「過去の予約を表示する」フィルタ（トグルスイッチ）**
+  * **項目：日時(曜日付)、施設、状態、参加者、保留、メモ**
+
+### ● ダイアログ（Modal）
+
+* **以下の操作を行うと、背景が暗くなり入力画面がポップアップする。**
+  * **カレンダーの日付セルをクリック（新規登録）**
+  * **カレンダーのイベントをクリック（編集）**
+  * **リストの行をクリック（編集）**
+
 
 ## 4. RegisterReservationView（予約登録画面）
 
