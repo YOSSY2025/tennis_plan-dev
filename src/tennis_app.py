@@ -381,7 +381,7 @@ if cal_state:
             施設: {r['facility']}<br>
             ステータス: {r['status']}<br>
             時間:<br> &nbsp;&nbsp;{int(safe_int(r['start_hour'])):02d}:{int(safe_int(r['start_minute'])):02d} - {int(safe_int(r['end_hour'])):02d}:{int(safe_int(r['end_minute'])):02d}<br>
-            参加者: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
+            参加: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
             保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
             """, unsafe_allow_html=True)
