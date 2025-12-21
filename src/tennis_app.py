@@ -323,66 +323,119 @@ for idx, r in df_res.iterrows():
     })
 
 
-# ===== カレンダー表示 =====
-# カレンダー初期位置の決定
-initial_date = datetime.now().strftime("%Y-%m-%d")
-if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
-    initial_date = st.session_state["clicked_date"]
+# ---------------------------------------------------------
+# 5. 画面表示（タブ切り替え）
+# ---------------------------------------------------------
+tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
-# Keyには「年月 (YYYY-MM)」だけを使う（同月内の移動でカレンダーを破壊しないため）
-cal_key = str(initial_date)[:7]
+# === タブ1: カレンダー表示 ===
+with tab_calendar:
+    # カレンダー初期位置の固定
+    initial_date = datetime.now().strftime("%Y-%m-%d")
+    if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
+        initial_date = st.session_state["clicked_date"]
 
-cal_state = calendar(
-    events=events,
-    options={
-        "initialView": "dayGridMonth",
-        "initialDate": initial_date,
-        "selectable": True,
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
-        "eventDisplay": "block",
-        "displayEventTime": False,
-        "height": "auto",
-        "contentHeight": "auto",
-        "aspectRatio": 1.2,
-        "titleFormat": {"year": "numeric", "month": "2-digit"}
-    },
-    key=f"calendar_{cal_key}"
-)
+    # 月単位でIDを変えて再描画させる設定
+    cal_key = str(initial_date)[:7]
+
+    cal_state = calendar(
+        events=events,
+        options={
+            "initialView": "dayGridMonth",
+            "initialDate": initial_date,
+            "selectable": True,
+            "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
+            "eventDisplay": "block",
+            "displayEventTime": False,
+            "height": "auto",
+            "contentHeight": "auto",
+            "aspectRatio": 1.2,
+            "titleFormat": {"year": "numeric", "month": "2-digit"}
+        },
+        key=f"calendar_{cal_key}"
+    )
+
+# === タブ2: 予約リスト表示 ===
+with tab_list:
+    st.markdown("##### 予約一覧")
+    
+    # 表示用にデータを整形（元データ df_res は触らない）
+    df_list = df_res.copy()
+    
+    # 1. 時間を「09:00 - 11:00」形式に見やすくする
+    def format_time_range(r):
+        sh = int(safe_int(r.get('start_hour')))
+        sm = int(safe_int(r.get('start_minute')))
+        eh = int(safe_int(r.get('end_hour')))
+        em = int(safe_int(r.get('end_minute')))
+        return f"{sh:02}:{sm:02} - {eh:02}:{em:02}"
+    
+    # データがある場合のみ加工
+    if not df_list.empty:
+        df_list['時間'] = df_list.apply(format_time_range, axis=1)
+        
+        # 2. 参加者リストを「Aさん, Bさん」の文字列にする
+        def format_list_col(lst):
+            if isinstance(lst, list): return ", ".join(lst)
+            return str(lst)
+        
+        df_list['参加者'] = df_list['participants'].apply(format_list_col)
+        df_list['保留'] = df_list['consider'].apply(format_list_col)
+        
+        # 3. 表示したい列だけ選んで、日本語の名前に変える
+        display_cols = ['date', '時間', 'facility', 'status', '参加者', '保留', 'message']
+        col_map = {
+            'date': '日付',
+            'facility': '施設',
+            'status': '状態',
+            'message': 'メモ'
+        }
+        
+        # カラムが存在するかチェックしてからリネーム
+        valid_cols = [c for c in display_cols if c in df_list.columns]
+        df_display = df_list[valid_cols].rename(columns=col_map)
+        
+        # 日付順に並べ替え
+        if '日付' in df_display.columns:
+            df_display = df_display.sort_values('日付', ascending=True)
+
+        # 表を表示（まだクリック機能はつけていません）
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+    else:
+        st.info("予約データがありません。")
 
 
 # ==========================================
-# 5. イベントハンドリング（状態の保存のみを行う）
+# 6. イベントハンドリング（カレンダー操作）
 # ==========================================
+# カレンダーからの操作があれば、状態を保存する
 if cal_state:
     callback = cal_state.get("callback")
 
     if callback == "dateClick":
-        # 日付がクリックされたら、その日付を保存し、イベント選択状態は解除
         clicked_date_str = cal_state["dateClick"]["date"]
         st.session_state['clicked_date'] = clicked_date_str
-        st.session_state['active_event_idx'] = None  # 新規登録モードへ
+        st.session_state['active_event_idx'] = None
     
     elif callback == "eventClick":
-        # イベントがクリックされたら、IDを保存
         ev = cal_state["eventClick"]["event"]
         idx = int(ev["id"])
-        st.session_state['active_event_idx'] = idx # 編集モードへ
+        st.session_state['active_event_idx'] = idx
         
-        # カレンダーの月をキープするために日付も保存
+        # カレンダーの月を維持
         if idx in df_res.index:
             target_date = df_res.loc[idx]["date"]
             st.session_state['clicked_date'] = str(target_date)
 
 
 # ==========================================
-# 6. 画面描画（保存された状態に基づいて表示）
+# 7. 編集・登録フォームの表示
 # ==========================================
 
-# A. イベント編集画面（IDが保存されている場合）
+# A. 編集モード（イベント選択中）
 if st.session_state.get('active_event_idx') is not None:
     idx = st.session_state['active_event_idx']
     
-    # スクロール用アンカー
     st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
     st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
 
@@ -404,7 +457,6 @@ if st.session_state.get('active_event_idx') is not None:
         メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
         """, unsafe_allow_html=True)
 
-        # ニックネーム選択
         past_nicks = []
         for col in ["participants", "absent", "consider"]:
             if col in df_res.columns:
@@ -465,7 +517,7 @@ if st.session_state.get('active_event_idx') is not None:
                 if st.button("削除を確定", key=f"delete_{idx}"):
                     df_res = df_res.drop(idx).reset_index(drop=True)
                     save_reservations(df_res)
-                    st.session_state['active_event_idx'] = None # 削除したらモード解除
+                    st.session_state['active_event_idx'] = None
                     st.success("削除しました")
                     st.rerun()
 
@@ -478,7 +530,7 @@ if st.session_state.get('active_event_idx') is not None:
                 st.rerun()
 
 
-# B. 新規登録画面（日付が保存されていて、編集モードでない場合）
+# B. 新規登録モード（日付選択中 ＆ 編集モードでない）
 elif st.session_state.get('clicked_date') is not None:
     clicked_date = st.session_state['clicked_date']
     clicked_date_jst = to_jst_date(clicked_date)
