@@ -1,41 +1,10 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date, timedelta
-# ▼【変更】時間を扱うクラスを 'dt_time' に名前変更して、下の time モジュールと区別する
-from datetime import time as dt_time
+from datetime import datetime, date, time, timedelta
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-# ▼【追加】待機処理用のモジュール
-import time
-from gspread.exceptions import APIError
-
-# ▼【追加】API制限対策: エラーが出たら少し待って再試行する関数
-def run_with_retry(func, *args, **kwargs):
-    max_retries = 5
-    for i in range(max_retries):
-        try:
-            return func(*args, **kwargs)
-        except APIError as e:
-            if i == max_retries - 1: raise e
-            code = e.response.status_code
-            if code == 429 or code >= 500:
-                time.sleep(2 ** (i + 1)) # timeモジュールで待機
-            else:
-                raise e
-        except Exception as e:
-            if i == max_retries - 1: raise e
-            time.sleep(2)
-
-# ▼【追加】安全な数値変換（エラー防止用）
-def safe_int(val, default=0):
-    try:
-        if pd.isna(val) or val == "": return default
-        return int(float(val))
-    except:
-        return default
-
 
 # ===== Google Sheets 認証 =====
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
@@ -64,10 +33,9 @@ except Exception as e:
 
 
 # ===== Google Sheets 読み書き関数 =====
-@st.cache_data(ttl=15)
 def load_reservations():
-    # リトライ関数経由で取得
-    data = run_with_retry(worksheet.get_all_records)
+    # 常に最新を取得
+    data = worksheet.get_all_records()
     df = pd.DataFrame(data)
 
     # 期待されるカラム（consider を含む）
@@ -131,12 +99,9 @@ def save_reservations(df):
     ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
-    # Google Sheets にアップデート（リトライ経由）
-    run_with_retry(worksheet.clear)
-    run_with_retry(worksheet.update,values)
-
-    # キャッシュクリア
-    load_reservations.clear()
+    # Google Sheets にアップデート（全書き換え）
+    worksheet.clear()
+    worksheet.update(values)
 
 # ===== JST変換関数 =====
 def to_jst_date(iso_str):
@@ -172,8 +137,7 @@ def check_and_show_reminders():
             # シートがまだなければ何もしない
             return
 
-        #ここもリトライ経由
-        records = run_with_retry(lottery_sheet.get_all_records)
+        records = lottery_sheet.get_all_records()
         df = pd.DataFrame(records)
         
         if df.empty:
@@ -286,29 +250,12 @@ status_color = {
 
 events = []
 for idx, r in df_res.iterrows():
+    if pd.isna(r["date"]):
+        continue
 
-    # 日付データの安全な取り出し
-    raw_date = r.get("date")
-    if pd.isna(raw_date) or raw_date == "": continue
-    
-    # 型チェック強化（文字列なら日付型に直す）
-    if isinstance(raw_date, str):
-        try: curr_date = datetime.fromisoformat(str(raw_date)[:10]).date()
-        except: continue
-    else:
-        curr_date = raw_date
-
-    # 時間データの安全な取り出し
-    s_hour = safe_int(r.get("start_hour"), 9)
-    s_min  = safe_int(r.get("start_minute"), 0)
-    e_hour = safe_int(r.get("end_hour"), 11)
-    e_min  = safe_int(r.get("end_minute"), 0)
-
-    try:
-        # ★重要: ここで dt_time を使用 (time だとエラーになります)
-        start_dt = datetime.combine(curr_date, dt_time(s_hour, s_min))
-        end_dt   = datetime.combine(curr_date, dt_time(e_hour, e_min))
-    except Exception: continue
+    # 時間計算
+    start_dt = datetime.combine(r["date"], time(int(r.get("start_hour",0)), int(r.get("start_minute",0))))
+    end_dt   = datetime.combine(r["date"], time(int(r.get("end_hour",0)), int(r.get("end_minute",0))))
 
     color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
     title_str = f"{r['status']} {r['facility']}"
@@ -383,11 +330,11 @@ if cal_state:
 
         # --- 時間選択 ---
         st.markdown("**開始時間**")
-        start_time = st.time_input("", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        start_time = st.time_input("", value=time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
         
         st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
         st.markdown("**終了時間**")
-        end_time = st.time_input("", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        end_time = st.time_input("", value=time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
 
         # --- メッセージ ---
         message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
@@ -444,7 +391,8 @@ if cal_state:
             日付: {event_date}<br>
             施設: {r['facility']}<br>
             ステータス: {r['status']}<br>
-            時間:<br> &nbsp;&nbsp;{int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>            参加者:<br> &nbsp;&nbsp;{', '.join(r['participants']) if r['participants'] else 'なし'}<br>
+            時間:<br> &nbsp;&nbsp;{int(r['start_hour']):02d}:{int(r['start_minute']):02d} - {int(r['end_hour']):02d}:{int(r['end_minute']):02d}<br>
+            参加者:<br> &nbsp;&nbsp;{', '.join(r['participants']) if r['participants'] else 'なし'}<br>
             保留:<br> &nbsp;&nbsp;{', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
             メッセージ:<br> &nbsp;&nbsp;{r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
             """, unsafe_allow_html=True)
