@@ -396,9 +396,12 @@ with tab_list:
             return f"{d.strftime('%Y-%m-%d')} {wd}"
 
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
+
+        # ★追加: 日付と時間を結合して「日時」列を作る
+        df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         
-        # 5. 表示カラムの整理
-        display_cols = ['日付', '時間', 'facility', 'status', '参加者', '保留', 'message']
+        # 5. 表示カラムの整理（日付・時間を削除し、日時を追加）
+        display_cols = ['日時', 'facility', 'status', '参加者', '保留', 'message']
         col_map = {
             'facility': '施設',
             'status': '状態',
@@ -418,26 +421,26 @@ with tab_list:
 
         df_display = df_list[final_cols].rename(columns=rename_dict)
         
-        if '日付' in df_display.columns:
-            df_display = df_display.sort_values('日付', ascending=True)
+        # ソート（文字列だがYYYY-MM-DD始まりなので正しく並ぶ）
+        if '日時' in df_display.columns:
+            df_display = df_display.sort_values('日時', ascending=True)
 
-        # 6. 表を表示（カラム幅を最適化）
+        # 6. 表を表示
         event_selection = st.dataframe(
             df_display,
-            use_container_width=True, # 画面いっぱいには広げる
+            use_container_width=True,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
             key="reservation_list_table",
             column_config={
-                # widthは small, medium, large またはピクセル指定が可能
-                "日付": st.column_config.TextColumn("日付", width="medium"), # 曜日が入るのでmedium
-                "時間": st.column_config.TextColumn("時間", width="medium"),  # 短いのでsmall
+                # width設定: 日時は長くなるのでmedium〜large確保
+                "日時": st.column_config.TextColumn("日時", width="medium"),
                 "施設": st.column_config.TextColumn("施設", width="medium"),
-                "状態": st.column_config.TextColumn("状態", width="small"),  # 2文字なのでsmall
-                "参加者": st.column_config.TextColumn("参加者", width="large"), # 名前が並ぶのでlarge
-                "保留": st.column_config.TextColumn("保留", width="medium"),  # そこそこ長い
-                "メモ": st.column_config.TextColumn("メモ", width="large"),   # 長文用
+                "状態": st.column_config.TextColumn("状態", width="small"),
+                "参加者": st.column_config.TextColumn("参加者", width="large"),
+                "保留": st.column_config.TextColumn("保留", width="medium"),
+                "メモ": st.column_config.TextColumn("メモ", width="large"),
             }
         )
         
