@@ -408,7 +408,7 @@ if cal_state:
         
         # ★追加: クリック時の再描画で月が戻らないように日付を記録
         if "start" in ev:
-            st.session_state['clicked_date'] = ev["start"]
+            st.session_state['clicked_date'] = ev["start"].split("T")[0]
 
         st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
         st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
