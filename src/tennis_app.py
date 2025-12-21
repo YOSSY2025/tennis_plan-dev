@@ -327,11 +327,15 @@ cal_state = calendar(
 )
 
 
+# ===== イベント操作 =====
 if cal_state:
     callback = cal_state.get("callback")
 
-    # ---- 新規登録 ----
+    # ---- 1. 日付クリック（新規登録） ----
     if callback == "dateClick":
+        # ★追加: 新規登録モードに入ったら、イベント選択状態を解除する
+        st.session_state['active_event_idx'] = None
+
         clicked_date = cal_state["dateClick"]["date"]
         clicked_date_jst = to_jst_date(clicked_date)
 
@@ -362,12 +366,11 @@ if cal_state:
         status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
 
         st.markdown("**開始時間**")
-        # ★重要: ここも dt_time を使用
-        start_time = st.time_input("", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        start_time = st.time_input("開始時間", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
         
         st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
         st.markdown("**終了時間**")
-        end_time = st.time_input("", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+        end_time = st.time_input("終了時間", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
 
         message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
         message = message_buf.replace('\n', '<br>')    
@@ -401,20 +404,29 @@ if cal_state:
                     st.rerun()
 
 
-    # ---- 詳細・参加表明 ----
-    elif callback == "eventClick":
-        ev = cal_state["eventClick"]["event"]
-        idx = int(ev["id"])
+    # ---- 2. 詳細・参加表明（ここを大幅修正） ----
+    # ★修正: 「カレンダーをクリックした時」または「反映ボタンを押してIDが記憶されている時」にここに入る
+    elif callback == "eventClick" or st.session_state.get('active_event_idx') is not None:
         
-        # ★追加: クリック時の再描画で月が戻らないように日付を記録
-        if "start" in ev:
-            st.session_state['clicked_date'] = ev["start"].split("T")[0]
+        # IDの特定：クリック直後か、記憶されたものか
+        if callback == "eventClick":
+            ev = cal_state["eventClick"]["event"]
+            idx = int(ev["id"])
+            st.session_state['active_event_idx'] = idx # ★IDを記憶！
+        else:
+            idx = st.session_state['active_event_idx'] # ★記憶から復元！
+
+        # カレンダーの月を維持する処理
+        if idx in df_res.index:
+            target_date = df_res.loc[idx]["date"]
+            st.session_state['clicked_date'] = str(target_date)
 
         st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
         st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
         
         if idx not in df_res.index:
-            st.warning("このイベントは存在しません。")
+            st.warning("このイベントは削除されたか存在しません。")
+            st.session_state['active_event_idx'] = None # 存在しないなら記憶を消す
         else:
             r = df_res.loc[idx]
             event_date = to_jst_date(r["date"])
@@ -457,12 +469,15 @@ if cal_state:
                     absent = list(r["absent"]) if isinstance(r["absent"], list) else []
                     consider = list(r["consider"]) if "consider" in r and isinstance(r["consider"], list) else []
 
+                    # 削除
                     if nick in participants: participants.remove(nick)
                     if nick in absent: absent.remove(nick)
                     if nick in consider: consider.remove(nick)
 
+                    # 追加
                     if part == "参加": participants.append(nick)
                     elif part == "保留": consider.append(nick)
+                    # 削除の場合は追加しない
 
                     df_res.at[idx, "participants"] = participants
                     df_res.at[idx, "absent"] = absent
@@ -490,6 +505,8 @@ if cal_state:
                     if st.button("削除を確定", key=f"delete_{idx}"):
                         df_res = df_res.drop(idx).reset_index(drop=True)
                         save_reservations(df_res)
+                        # ★追加: 削除したら選択状態も解除する
+                        st.session_state['active_event_idx'] = None
                         st.success("削除しました")
                         st.rerun()
 
