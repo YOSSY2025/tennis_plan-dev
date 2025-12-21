@@ -453,10 +453,9 @@ if cal_state:
             日付: {event_date}<br>
             施設: {r['facility']}<br>
             ステータス: {r['status']}<br>
-            時間: {int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>
-            参加者: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
-            保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
-            メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
+            時間:<br> &nbsp;&nbsp;{int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>            参加者:<br> &nbsp;&nbsp;{', '.join(r['participants']) if r['participants'] else 'なし'}<br>
+            保留:<br> &nbsp;&nbsp;{', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
+            メッセージ:<br> &nbsp;&nbsp;{r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
             """, unsafe_allow_html=True)
 
             # ---- ニックネーム入力 ----
