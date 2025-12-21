@@ -329,6 +329,8 @@ initial_date = datetime.now().strftime("%Y-%m-%d")
 if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
     initial_date = st.session_state["clicked_date"]
 
+cal_key = str(initial_date)[:7] # YYYY-MM形式でキーを作成
+
 cal_state = calendar(
     events=events,
     options={
@@ -343,7 +345,7 @@ cal_state = calendar(
         "aspectRatio": 1.2,
         "titleFormat": {"year": "numeric", "month": "2-digit"}
     },
-    key=f"calendar_{initial_date}"
+    key=f"calendar_{cal_key}"
 )
 
 
