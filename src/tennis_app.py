@@ -324,12 +324,13 @@ for idx, r in df_res.iterrows():
 
 
 # ===== カレンダー表示 =====
-# （直前の initial_date を設定するコードはそのままでOK）
+# カレンダー初期位置の決定
 initial_date = datetime.now().strftime("%Y-%m-%d")
 if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
     initial_date = st.session_state["clicked_date"]
 
-cal_key = str(initial_date)[:7] # YYYY-MM形式でキーを作成
+# Keyには「年月 (YYYY-MM)」だけを使う（同月内の移動でカレンダーを破壊しないため）
+cal_key = str(initial_date)[:7]
 
 cal_state = calendar(
     events=events,
@@ -349,193 +350,192 @@ cal_state = calendar(
 )
 
 
-# ===== イベント操作 =====
+# ==========================================
+# 5. イベントハンドリング（状態の保存のみを行う）
+# ==========================================
 if cal_state:
     callback = cal_state.get("callback")
 
-    # ---- 1. 日付クリック（新規登録） ----
     if callback == "dateClick":
-        # ★追加: 新規登録モードに入ったら、イベント選択状態を解除する
-        st.session_state['active_event_idx'] = None
-
-        clicked_date = cal_state["dateClick"]["date"]
-        clicked_date_jst = to_jst_date(clicked_date)
-
-        st.session_state['clicked_date'] = clicked_date
-        st.session_state['clicked_date_jst'] = clicked_date_jst
+        # 日付がクリックされたら、その日付を保存し、イベント選択状態は解除
+        clicked_date_str = cal_state["dateClick"]["date"]
+        st.session_state['clicked_date'] = clicked_date_str
+        st.session_state['active_event_idx'] = None  # 新規登録モードへ
     
-        st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
-        st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
+    elif callback == "eventClick":
+        # イベントがクリックされたら、IDを保存
+        ev = cal_state["eventClick"]["event"]
+        idx = int(ev["id"])
+        st.session_state['active_event_idx'] = idx # 編集モードへ
         
-        st.info(f"📅 {clicked_date_jst} の予約を確認/登録")
-
-        past_facilities = []
-        if 'facility' in df_res.columns:
-            past_facilities = df_res['facility'].dropna().unique().tolist()
-        
-        facility_select = st.selectbox(
-            "施設名を選択または新規登録", 
-            options=["(施設名を選択)"] + past_facilities + ["新規登録"], 
-            index=0
-        )
-
-        facility = ""
-        if facility_select == "新規登録":
-            facility = st.text_input("施設名を入力")        
-        elif facility_select != "(施設名を選択)" and facility_select != "":
-            facility = facility_select
-
-        status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
-
-        st.markdown("**開始時間**")
-        start_time = st.time_input("開始時間", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
-        
-        st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
-        st.markdown("**終了時間**")
-        end_time = st.time_input("終了時間", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
-
-        message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
-        message = message_buf.replace('\n', '<br>')    
-
-        clicked_date = st.session_state.get('clicked_date')
-        clicked_date_jst = st.session_state.get('clicked_date_jst')
-
-        if clicked_date is not None:
-            if st.button("登録", key=f"reg_{clicked_date}"):
-                if facility == "":
-                    st.warning("⚠️ 施設名が選択されていません。")
-                elif end_time <= start_time:
-                    st.warning("⚠️ 終了時間は開始時間より後にしてください。")
-                else:
-                    new_row = {
-                        "date": clicked_date_jst,
-                        "facility": facility,
-                        "status": status,
-                        "start_hour": start_time.hour,
-                        "start_minute": start_time.minute,
-                        "end_hour": end_time.hour,
-                        "end_minute": end_time.minute,
-                        "participants": [],
-                        "absent": [],
-                        "consider": [],
-                        "message": message
-                    }
-                    df_res = pd.concat([df_res, pd.DataFrame([new_row])], ignore_index=True)
-                    save_reservations(df_res)
-                    st.success(f"{clicked_date_jst} に {facility} を登録しました")
-                    st.rerun()
-
-
-    # ---- 2. 詳細・参加表明（ここを大幅修正） ----
-    # ★修正: 「カレンダーをクリックした時」または「反映ボタンを押してIDが記憶されている時」にここに入る
-    elif callback == "eventClick" or st.session_state.get('active_event_idx') is not None:
-        
-        # IDの特定：クリック直後か、記憶されたものか
-        if callback == "eventClick":
-            ev = cal_state["eventClick"]["event"]
-            idx = int(ev["id"])
-            st.session_state['active_event_idx'] = idx # ★IDを記憶！
-        else:
-            idx = st.session_state['active_event_idx'] # ★記憶から復元！
-
-        # カレンダーの月を維持する処理
+        # カレンダーの月をキープするために日付も保存
         if idx in df_res.index:
             target_date = df_res.loc[idx]["date"]
             st.session_state['clicked_date'] = str(target_date)
 
-        st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
-        st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
+
+# ==========================================
+# 6. 画面描画（保存された状態に基づいて表示）
+# ==========================================
+
+# A. イベント編集画面（IDが保存されている場合）
+if st.session_state.get('active_event_idx') is not None:
+    idx = st.session_state['active_event_idx']
+    
+    # スクロール用アンカー
+    st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
+    st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
+
+    if idx not in df_res.index:
+        st.warning("このイベントは削除されたか存在しません。")
+        st.session_state['active_event_idx'] = None
+    else:
+        r = df_res.loc[idx]
+        event_date = to_jst_date(r["date"])
+
+        st.markdown(f"""
+        ### イベント詳細
+        日付: {event_date}<br>
+        施設: {r['facility']}<br>
+        ステータス: {r['status']}<br>
+        時間: {int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>
+        参加: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
+        保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
+        メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
+        """, unsafe_allow_html=True)
+
+        # ニックネーム選択
+        past_nicks = []
+        for col in ["participants", "absent", "consider"]:
+            if col in df_res.columns:
+                for lst in df_res[col]:
+                    if isinstance(lst, list): past_nicks.extend([n for n in lst if n])
+                    elif isinstance(lst, str) and lst.strip(): past_nicks.extend(lst.split(";"))
+        past_nicks = sorted(set(past_nicks), key=lambda s: s)
         
-        if idx not in df_res.index:
-            st.warning("このイベントは削除されたか存在しません。")
-            st.session_state['active_event_idx'] = None # 存在しないなら記憶を消す
+        default_option = "(ニックネーム選択または入力)"
+        nick_choice = st.selectbox("ニックネーム選択または新規登録", options=[default_option] + past_nicks + ["新規登録"], key=f"nick_choice_{idx}")
+
+        nick = ""
+        if nick_choice == "新規登録":
+            nick = st.text_input("新しいニックネーム入力", key=f"nick_input_{idx}")
+        elif nick_choice != default_option:
+            nick = nick_choice
+    
+        part = st.radio("参加状況", ["参加", "保留", "削除"], key=f"part_{idx}")
+
+        if st.button("反映", key=f"apply_{idx}"):
+            if not nick:
+                st.warning("⚠️ ニックネームが選択されていません。")
+            else:
+                participants = list(r["participants"]) if isinstance(r["participants"], list) else []
+                absent = list(r["absent"]) if isinstance(r["absent"], list) else []
+                consider = list(r["consider"]) if "consider" in r and isinstance(r["consider"], list) else []
+
+                if nick in participants: participants.remove(nick)
+                if nick in absent: absent.remove(nick)
+                if nick in consider: consider.remove(nick)
+
+                if part == "参加": participants.append(nick)
+                elif part == "保留": consider.append(nick)
+
+                df_res.at[idx, "participants"] = participants
+                df_res.at[idx, "absent"] = absent
+                df_res.at[idx, "consider"] = consider
+                
+                save_reservations(df_res)
+                st.success(f"{nick} は {part} に設定されました")
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("イベント操作")
+        operation = st.radio("操作を選択", ["ステータス変更", "メッセージ変更","削除"], key=f"ev_op_{idx}")
+
+        if operation == "ステータス変更":
+            new_status = st.selectbox("新しいステータス", ["確保", "抽選中", "中止", "完了"], key=f"status_change_{idx}")
+            if st.button("変更を反映", key=f"apply_status_{idx}"):
+                df_res.at[idx, "status"] = new_status
+                save_reservations(df_res)
+                st.success("ステータスを変更しました")
+                st.rerun()
+
+        elif operation == "削除":
+            st.warning("⚠️ 削除確認")
+            if st.checkbox("本当に削除しますか？", key=f"confirm_del_{idx}"):
+                if st.button("削除を確定", key=f"delete_{idx}"):
+                    df_res = df_res.drop(idx).reset_index(drop=True)
+                    save_reservations(df_res)
+                    st.session_state['active_event_idx'] = None # 削除したらモード解除
+                    st.success("削除しました")
+                    st.rerun()
+
+        elif operation == "メッセージ変更":
+            new_message = st.text_area("メッセージ", value=r.get("message", "").replace('<br>', '\n'), key=f"message_change_{idx}", height=100)
+            if st.button("変更を反映", key=f"apply_message_{idx}"):
+                df_res.at[idx, "message"] = new_message.replace('\n', '<br>')   
+                save_reservations(df_res)
+                st.success("メッセージを変更しました")
+                st.rerun()
+
+
+# B. 新規登録画面（日付が保存されていて、編集モードでない場合）
+elif st.session_state.get('clicked_date') is not None:
+    clicked_date = st.session_state['clicked_date']
+    clicked_date_jst = to_jst_date(clicked_date)
+
+    st.markdown('<div id="form-section"></div>', unsafe_allow_html=True)
+    st.markdown("""<script>document.getElementById('form-section').scrollIntoView({behavior: 'smooth'});</script>""", unsafe_allow_html=True)
+    
+    st.info(f"📅 {clicked_date_jst} の予約を確認/登録")
+
+    past_facilities = []
+    if 'facility' in df_res.columns:
+        past_facilities = df_res['facility'].dropna().unique().tolist()
+    
+    facility_select = st.selectbox(
+        "施設名を選択または新規登録", 
+        options=["(施設名を選択)"] + past_facilities + ["新規登録"], 
+        index=0
+    )
+
+    facility = ""
+    if facility_select == "新規登録":
+        facility = st.text_input("施設名を入力")        
+    elif facility_select != "(施設名を選択)" and facility_select != "":
+        facility = facility_select
+
+    status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], key=f"st_{clicked_date}")
+
+    st.markdown("**開始時間**")
+    start_time = st.time_input("開始時間", value=dt_time(9, 0), key=f"start_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+    
+    st.markdown("<div style='margin-top:-10px'></div>", unsafe_allow_html=True)
+    st.markdown("**終了時間**")
+    end_time = st.time_input("終了時間", value=dt_time(10, 0), key=f"end_{clicked_date}", step=timedelta(minutes=30), label_visibility="collapsed")
+
+    message_buf = st.text_area("メッセージ（任意）", placeholder="例：集合時間や持ち物など", key=f"msg_{clicked_date}")
+    message = message_buf.replace('\n', '<br>')    
+
+    if st.button("登録", key=f"reg_{clicked_date}"):
+        if facility == "":
+            st.warning("⚠️ 施設名が選択されていません。")
+        elif end_time <= start_time:
+            st.warning("⚠️ 終了時間は開始時間より後にしてください。")
         else:
-            r = df_res.loc[idx]
-            event_date = to_jst_date(r["date"])
-
-            st.markdown(f"""
-            ### イベント詳細
-            日付: {event_date}<br>
-            施設: {r['facility']}<br>
-            ステータス: {r['status']}<br>
-            時間: {int(safe_int(r.get('start_hour'))):02d}:{int(safe_int(r.get('start_minute'))):02d} - {int(safe_int(r.get('end_hour'))):02d}:{int(safe_int(r.get('end_minute'))):02d}<br>
-            参加: {', '.join(r['participants']) if r['participants'] else 'なし'}<br>
-            保留: {', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'}<br>
-            メッセージ: {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}
-            """, unsafe_allow_html=True)
-
-            past_nicks = []
-            for col in ["participants", "absent", "consider"]:
-                if col in df_res.columns:
-                    for lst in df_res[col]:
-                        if isinstance(lst, list): past_nicks.extend([n for n in lst if n])
-                        elif isinstance(lst, str) and lst.strip(): past_nicks.extend(lst.split(";"))
-            past_nicks = sorted(set(past_nicks), key=lambda s: s)
-            
-            default_option = "(ニックネーム選択または入力)"
-            nick_choice = st.selectbox("ニックネーム選択または新規登録", options=[default_option] + past_nicks + ["新規登録"], key=f"nick_choice_{idx}")
-
-            nick = ""
-            if nick_choice == "新規登録":
-                nick = st.text_input("新しいニックネーム入力", key=f"nick_input_{idx}")
-            elif nick_choice != default_option:
-                nick = nick_choice
-        
-            part = st.radio("参加状況", ["参加", "保留", "削除"], key=f"part_{idx}")
-
-            if st.button("反映", key=f"apply_{idx}"):
-                if not nick:
-                    st.warning("⚠️ ニックネームが選択されていません。")
-                else:
-                    participants = list(r["participants"]) if isinstance(r["participants"], list) else []
-                    absent = list(r["absent"]) if isinstance(r["absent"], list) else []
-                    consider = list(r["consider"]) if "consider" in r and isinstance(r["consider"], list) else []
-
-                    # 削除
-                    if nick in participants: participants.remove(nick)
-                    if nick in absent: absent.remove(nick)
-                    if nick in consider: consider.remove(nick)
-
-                    # 追加
-                    if part == "参加": participants.append(nick)
-                    elif part == "保留": consider.append(nick)
-                    # 削除の場合は追加しない
-
-                    df_res.at[idx, "participants"] = participants
-                    df_res.at[idx, "absent"] = absent
-                    df_res.at[idx, "consider"] = consider
-                    
-                    save_reservations(df_res)
-                    st.success(f"{nick} は {part} に設定されました")
-                    st.rerun()
-
-            st.markdown("---")
-            st.subheader("イベント操作")
-            operation = st.radio("操作を選択", ["ステータス変更", "メッセージ変更","削除"], key=f"ev_op_{idx}")
-
-            if operation == "ステータス変更":
-                new_status = st.selectbox("新しいステータス", ["確保", "抽選中", "中止", "完了"], key=f"status_change_{idx}")
-                if st.button("変更を反映", key=f"apply_status_{idx}"):
-                    df_res.at[idx, "status"] = new_status
-                    save_reservations(df_res)
-                    st.success("ステータスを変更しました")
-                    st.rerun()
-
-            elif operation == "削除":
-                st.warning("⚠️ 削除確認")
-                if st.checkbox("本当に削除しますか？", key=f"confirm_del_{idx}"):
-                    if st.button("削除を確定", key=f"delete_{idx}"):
-                        df_res = df_res.drop(idx).reset_index(drop=True)
-                        save_reservations(df_res)
-                        # ★追加: 削除したら選択状態も解除する
-                        st.session_state['active_event_idx'] = None
-                        st.success("削除しました")
-                        st.rerun()
-
-            elif operation == "メッセージ変更":
-                new_message = st.text_area("メッセージ", value=r.get("message", "").replace('<br>', '\n'), key=f"message_change_{idx}", height=100)
-                if st.button("変更を反映", key=f"apply_message_{idx}"):
-                    df_res.at[idx, "message"] = new_message.replace('\n', '<br>')   
-                    save_reservations(df_res)
-                    st.success("メッセージを変更しました")
-                    st.rerun()
+            new_row = {
+                "date": clicked_date_jst,
+                "facility": facility,
+                "status": status,
+                "start_hour": start_time.hour,
+                "start_minute": start_time.minute,
+                "end_hour": end_time.hour,
+                "end_minute": end_time.minute,
+                "participants": [],
+                "absent": [],
+                "consider": [],
+                "message": message
+            }
+            df_res = pd.concat([df_res, pd.DataFrame([new_row])], ignore_index=True)
+            save_reservations(df_res)
+            st.success(f"{clicked_date_jst} に {facility} を登録しました")
+            st.rerun()
