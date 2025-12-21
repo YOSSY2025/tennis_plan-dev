@@ -323,10 +323,17 @@ for idx, r in df_res.iterrows():
     })
 
 
+# ===== カレンダー表示 =====
+# （直前の initial_date を設定するコードはそのままでOK）
+initial_date = datetime.now().strftime("%Y-%m-%d")
+if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
+    initial_date = st.session_state["clicked_date"]
+
 cal_state = calendar(
     events=events,
     options={
         "initialView": "dayGridMonth",
+        "initialDate": initial_date,
         "selectable": True,
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": ""},
         "eventDisplay": "block",
@@ -336,7 +343,7 @@ cal_state = calendar(
         "aspectRatio": 1.2,
         "titleFormat": {"year": "numeric", "month": "2-digit"}
     },
-    key="reservation_calendar"
+    key=f"calendar_{initial_date}"
 )
 
 
