@@ -444,55 +444,52 @@ with tab_list:
             }
         )
         
+# クリックされたらIDを特定して、スイッチをONにする
         if len(event_selection.selection.rows) > 0:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
-
-            # カレンダーの月も連動
-            target_date = df_res.loc[actual_idx]["date"]
-            st.session_state['clicked_date'] = str(target_date)
             
-            # ★ここでポップアップ関数を呼ぶ！
-            entry_form_dialog("edit", idx=actual_idx)
-
+            # 「今選ばれている行」と「新しくクリックした行」が違う場合だけ処理する
+            # (これがないと無限リロードになる可能性があります)
+            if st.session_state.get('active_event_idx') != actual_idx:
+                
+                # 1. どのイベントか記憶
+                st.session_state['active_event_idx'] = actual_idx
+                
+                # 2. カレンダーの月も連動
+                target_date = df_res.loc[actual_idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+                
+                # 3. ★重要: 直接ダイアログを呼ばず、スイッチをONにする
+                st.session_state['popup_mode'] = "edit"
+                
+                # 4. 再実行して、下の「表示制御」ブロックに任せる
+                st.rerun()
     else:
         st.info("表示できる予約データがありません。")
 
 # ==========================================
-# 5. ポップアップ画面の定義（★ここが新規作成部分）
+# 5. ポップアップ画面の定義
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
     # --- A. 新規登録モード ---
     if mode == "new":
-        # ★修正: 生の文字列を、見やすい日付(YYYY-MM-DD)に変換して表示
         display_date = to_jst_date(date_str)
         st.write(f"📅 日付: {display_date}")
-
-        # 施設名選択
+        
         past_facilities = []
         if 'facility' in df_res.columns:
             past_facilities = df_res['facility'].dropna().unique().tolist()
         
-        facility_select = st.selectbox(
-            "施設名", 
-            options=["(施設名を選択)"] + past_facilities + ["新規登録"], 
-            index=0
-        )
-        if facility_select == "新規登録":
-            facility = st.text_input("施設名を入力")
-        elif facility_select != "(施設名を選択)":
-            facility = facility_select
-        else:
-            facility = ""
+        facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
+        facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
-        status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], index=1) # デフォルト抽選中
+        status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], index=1)
 
         col1, col2 = st.columns(2)
-        with col1:
-            start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
-        with col2:
-            end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
+        with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
+        with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
 
@@ -502,7 +499,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             elif end_time <= start_time:
                 st.error("⚠️ 終了時間は開始時間より後にしてください")
             else:
-                # 保存処理
                 new_row = {
                     "date": to_jst_date(date_str),
                     "facility": facility,
@@ -516,14 +512,13 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     "consider": [],
                     "message": message.replace('\n', '<br>')
                 }
-                # データフレーム結合と保存
-                # ※関数内から外の df_res は参照できない場合があるので再取得推奨だが、
-                # ここでは簡易的に引数やグローバルを使う形にする。
-                # 安全のため再ロードしたデータを使う
                 current_df = load_reservations()
                 updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
                 save_reservations(updated_df)
                 st.success("登録しました")
+                
+                # ★追加: 処理完了時にモードを解除する（これでポップアップが閉じる）
+                st.session_state['popup_mode'] = None
                 st.rerun()
 
     # --- B. 編集モード ---
@@ -534,24 +529,21 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         r = df_res.loc[idx]
         
-# 詳細情報の表示
+        # 参加者リストの表示整形
+        def clean_join(lst):
+            if not isinstance(lst, list): return 'なし'
+            valid_names = [str(x) for x in lst if x and str(x).strip() != '']
+            return ', '.join(valid_names) if valid_names else 'なし'
+
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
         st.markdown(f"**施設:** {r['facility']} （{r['status']}）")
-        
-        # ★追加: 参加者と保留者を表示
-        participants_str = ', '.join(r['participants']) if r['participants'] else 'なし'
-        consider_str = ', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'
-        
-        st.markdown(f"**参加:** {participants_str}")
-        st.markdown(f"**保留:** {consider_str}")
-        
+        st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
+        st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
         st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
         st.divider()
-        
-        # 参加表明フォーム
+
+        # 参加表明
         st.subheader("参加表明")
-        
-        # ニックネーム選択
         past_nicks = []
         for col in ["participants", "absent", "consider"]:
             if col in df_res.columns:
@@ -563,12 +555,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         col_nick, col_type = st.columns([1, 1])
         with col_nick:
             nick_choice = st.selectbox("名前", options=["(選択)"] + past_nicks + ["新規入力"], key="edit_nick")
-            if nick_choice == "新規入力":
-                nick = st.text_input("名前を入力", key="edit_nick_input")
-            elif nick_choice != "(選択)":
-                nick = nick_choice
-            else:
-                nick = ""
+            nick = st.text_input("名前を入力", key="edit_nick_input") if nick_choice == "新規入力" else (nick_choice if nick_choice != "(選択)" else "")
         
         with col_type:
             part_type = st.radio("区分", ["参加", "保留", "削除"], horizontal=True, key="edit_type")
@@ -577,20 +564,16 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             if not nick:
                 st.warning("名前を選択してください")
             else:
-                # データの更新
-                # 再度最新データを取得して更新する（競合回避）
                 current_df = load_reservations()
                 if idx in current_df.index:
                     participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
                     absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
                     consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
 
-                    # 既存削除
                     if nick in participants: participants.remove(nick)
                     if nick in absent: absent.remove(nick)
                     if nick in consider: consider.remove(nick)
 
-                    # 追加
                     if part_type == "参加": participants.append(nick)
                     elif part_type == "保留": consider.append(nick)
                     
@@ -600,14 +583,13 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     
                     save_reservations(current_df)
                     st.success("反映しました")
+                    # ★追加: モード解除
+                    st.session_state['popup_mode'] = None
                     st.rerun()
 
-        # 削除・編集エリア（アコーディオンで隠す）
         with st.expander("管理者メニュー（編集・削除）"):
             edit_tab, delete_tab = st.tabs(["内容編集", "削除"])
-            
             with edit_tab:
-                # メッセージなどの編集
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
                 new_status = st.selectbox("ステータスの変更", ["確保", "抽選中", "中止", "完了"], index=["確保", "抽選中", "中止", "完了"].index(r['status']) if r['status'] in ["確保", "抽選中", "中止", "完了"] else 0)
                 
@@ -617,6 +599,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df.at[idx, "status"] = new_status
                     save_reservations(current_df)
                     st.success("更新しました")
+                    # ★追加: モード解除
+                    st.session_state['popup_mode'] = None
                     st.rerun()
 
             with delete_tab:
@@ -626,47 +610,59 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = current_df.drop(idx).reset_index(drop=True)
                     save_reservations(current_df)
                     st.success("削除しました")
+                    # ★追加: モード解除
+                    st.session_state['popup_mode'] = None
                     st.rerun()
 
 
 # ==========================================
-# 6. イベント操作の検知とポップアップ呼び出し
+# 6. イベントハンドリング（スイッチを入れる）
 # ==========================================
 
-# カレンダーの操作検知
+# 状態変数の初期化
+if 'popup_mode' not in st.session_state:
+    st.session_state['popup_mode'] = None
+
+# A. カレンダーの操作検知
 if cal_state:
     callback = cal_state.get("callback")
 
-    # A. 日付クリック（新規登録）
     if callback == "dateClick":
-        clicked_date_str = cal_state["dateClick"]["date"]
-        # カレンダーの月を維持するためにセッションに保存
-        st.session_state['clicked_date'] = clicked_date_str
-        # ★ポップアップ呼び出し
-        entry_form_dialog("new", date_str=clicked_date_str)
+        # 日付クリック -> 新規モードON
+        st.session_state['clicked_date'] = cal_state["dateClick"]["date"]
+        st.session_state['active_event_idx'] = None
+        st.session_state['popup_mode'] = "new" # ★スイッチON
     
-    # B. イベントクリック（編集）
     elif callback == "eventClick":
+        # イベントクリック -> 編集モードON
         ev = cal_state["eventClick"]["event"]
         idx = int(ev["id"])
+        st.session_state['active_event_idx'] = idx
         
-        # カレンダーの月を維持するためにセッションに保存
         if idx in df_res.index:
             target_date = df_res.loc[idx]["date"]
             st.session_state['clicked_date'] = str(target_date)
         
-        # ★ポップアップ呼び出し
-        entry_form_dialog("edit", idx=idx)
+        st.session_state['popup_mode'] = "edit" # ★スイッチON
 
-# リストの操作検知（選択されたら編集ポップアップを開く）
-if "reservation_list_table" in st.session_state:
-    selection = st.session_state["reservation_list_table"].get("selection", {})
-    if selection and "rows" in selection and selection["rows"]:
-        # 選択された行のインデックスを取得（df_displayはタブ内で定義されているため、再計算が必要だが、
-        # ここでは簡易的に df_res の index を推測するロジックが必要。
-        # タブ内のロジックと分離しているため、リスト選択時のID特定が少し複雑。
-        # → リスト表示の場所で `entry_form_dialog` を呼ぶのが安全。
-        pass 
-        # ※補足: リストのクリック処理は「タブ2」の中に記述済み（前回のコード）ですが、
-        #  そこで `st.session_state['active_event_idx']` をセットする代わりに、
-        #  `entry_form_dialog("edit", idx=...)` を直接呼ぶように書き換える必要があります。
+# B. リストの操作検知（タブ2側での選択）
+# ※タブ2内のコードで st.session_state['active_event_idx'] をセットしているので、
+#   ここでは「IDがセットされていて、かつモードが未設定なら編集モードにする」等の補完を行う
+#   （あるいはタブ2の中で直接 popup_mode = 'edit' してもOKですが、ここで一括管理も可能です）
+
+
+# ==========================================
+# 7. ポップアップの表示（スイッチが入っていたら出す）
+# ==========================================
+
+# ★ここが最重要：クリック信号が途切れても、この変数が残っていれば表示され続ける
+if st.session_state['popup_mode'] == "new":
+    d_str = st.session_state.get('clicked_date', str(date.today()))
+    entry_form_dialog("new", date_str=d_str)
+
+elif st.session_state['popup_mode'] == "edit":
+    e_idx = st.session_state.get('active_event_idx')
+    if e_idx is not None:
+        entry_form_dialog("edit", idx=e_idx)
+    else:
+        st.session_state['popup_mode'] = None # IDがないなら閉じる
