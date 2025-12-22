@@ -633,11 +633,10 @@ if 'last_cal_state' not in st.session_state:
 
 # A. カレンダーの操作検知
 if cal_state:
-    # ★重要: 「今の状態」が「前回処理した状態」と違う場合だけ動く
-    # これにより、月移動などで再描画された時に、古いクリック情報に反応するのを防ぐ
+    # ★追加修正: 前回処理した状態と同じなら無視する（これで月移動時の誤爆を防ぐ）
     if cal_state != st.session_state['last_cal_state']:
         
-        # 新しい操作があったので記録を更新
+        # 新しい操作なので記録を更新
         st.session_state['last_cal_state'] = cal_state
         
         callback = cal_state.get("callback")
@@ -660,7 +659,7 @@ if cal_state:
                 st.session_state['clicked_date'] = str(target_date)
             
             st.session_state['popup_mode'] = "edit"
-
+            
 # B. リストの操作検知（タブ2側での選択）
 # ※タブ2内のコードで st.session_state['active_event_idx'] をセットしているので、
 #   ここでは「IDがセットされていて、かつモードが未設定なら編集モードにする」等の補完を行う
