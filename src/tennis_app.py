@@ -465,8 +465,10 @@ with tab_list:
 def entry_form_dialog(mode, idx=None, date_str=None):
     # --- A. 新規登録モード ---
     if mode == "new":
-        st.write(f"📅 日付: {date_str}")
-        
+        # ★修正: 生の文字列を、見やすい日付(YYYY-MM-DD)に変換して表示
+        display_date = to_jst_date(date_str)
+        st.write(f"📅 日付: {display_date}")
+
         # 施設名選択
         past_facilities = []
         if 'facility' in df_res.columns:
