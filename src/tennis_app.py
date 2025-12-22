@@ -532,12 +532,20 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         r = df_res.loc[idx]
         
-        # 詳細情報の表示
+# 詳細情報の表示
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
         st.markdown(f"**施設:** {r['facility']} （{r['status']}）")
-        st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) else ''}")
+        
+        # ★追加: 参加者と保留者を表示
+        participants_str = ', '.join(r['participants']) if r['participants'] else 'なし'
+        consider_str = ', '.join(r['consider']) if 'consider' in r and r['consider'] else 'なし'
+        
+        st.markdown(f"**参加:** {participants_str}")
+        st.markdown(f"**保留:** {consider_str}")
+        
+        st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
         st.divider()
-
+        
         # 参加表明フォーム
         st.subheader("参加表明")
         
