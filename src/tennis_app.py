@@ -444,7 +444,7 @@ with tab_list:
             }
         )
         
-# クリックされたらIDを特定して、スイッチをONにする
+        # クリックされたらIDを特定して、スイッチをONにする
         if len(event_selection.selection.rows) > 0:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
@@ -619,31 +619,47 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 # 6. イベントハンドリング（スイッチを入れる）
 # ==========================================
 
+# ==========================================
+# 6. イベントハンドリング（スイッチを入れる）
+# ==========================================
+
 # 状態変数の初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
+# ★追加: 前回処理したカレンダーの状態を記録する変数
+if 'last_cal_state' not in st.session_state:
+    st.session_state['last_cal_state'] = None
+
 # A. カレンダーの操作検知
 if cal_state:
-    callback = cal_state.get("callback")
+    # ★重要: 「今の状態」が「前回処理した状態」と違う場合だけ動く
+    # これにより、月移動などで再描画された時に、古いクリック情報に反応するのを防ぐ
+    if cal_state != st.session_state['last_cal_state']:
+        
+        # 新しい操作があったので記録を更新
+        st.session_state['last_cal_state'] = cal_state
+        
+        callback = cal_state.get("callback")
 
-    if callback == "dateClick":
-        # 日付クリック -> 新規モードON
-        st.session_state['clicked_date'] = cal_state["dateClick"]["date"]
-        st.session_state['active_event_idx'] = None
-        st.session_state['popup_mode'] = "new" # ★スイッチON
-    
-    elif callback == "eventClick":
-        # イベントクリック -> 編集モードON
-        ev = cal_state["eventClick"]["event"]
-        idx = int(ev["id"])
-        st.session_state['active_event_idx'] = idx
+        if callback == "dateClick":
+            # 日付クリック -> 新規モードON
+            clicked_date_str = cal_state["dateClick"]["date"]
+            st.session_state['clicked_date'] = clicked_date_str
+            st.session_state['active_event_idx'] = None
+            st.session_state['popup_mode'] = "new"
         
-        if idx in df_res.index:
-            target_date = df_res.loc[idx]["date"]
-            st.session_state['clicked_date'] = str(target_date)
-        
-        st.session_state['popup_mode'] = "edit" # ★スイッチON
+        elif callback == "eventClick":
+            # イベントクリック -> 編集モードON
+            ev = cal_state["eventClick"]["event"]
+            idx = int(ev["id"])
+            st.session_state['active_event_idx'] = idx
+            
+            if idx in df_res.index:
+                target_date = df_res.loc[idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+            
+            st.session_state['popup_mode'] = "edit"
 
 # B. リストの操作検知（タブ2側での選択）
 # ※タブ2内のコードで st.session_state['active_event_idx'] をセットしているので、
