@@ -1,41 +1,35 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
-# ★重要: 時間を扱うクラスを 'dt_time' という別名にして、下の time モジュールと区別する
 from datetime import time as dt_time  
 from streamlit_calendar import calendar
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-import time  # ★重要: API待機用のモジュール（こちらを 'time' として使う）
+import time
 from gspread.exceptions import APIError
 
 # ==========================================
-# 1. 共通関数・設定 (高速化・安定化用)
+# 1. 共通関数・設定
 # ==========================================
 
-# API制限対策: エラーが出たら少し待って再試行する関数
+# API制限対策
 def run_with_retry(func, *args, **kwargs):
-    """
-    func: 実行したい関数オブジェクト（()をつけずに渡すこと）
-    """
     max_retries = 5
     for i in range(max_retries):
         try:
-            # ここで関数を実行
             return func(*args, **kwargs)
         except APIError as e:
             if i == max_retries - 1: raise e
             code = e.response.status_code
             if code == 429 or code >= 500:
-                time.sleep(2 ** (i + 1)) # timeモジュールで待機
+                time.sleep(2 ** (i + 1))
             else:
                 raise e
         except Exception as e:
             if i == max_retries - 1: raise e
             time.sleep(2)
 
-# 安全な数値変換
 def safe_int(val, default=0):
     try:
         if pd.isna(val) or val == "": return default
@@ -43,7 +37,6 @@ def safe_int(val, default=0):
     except:
         return default
 
-# JST変換関数
 def to_jst_date(iso_str):
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
@@ -59,7 +52,6 @@ if not GSHEET_ID:
     st.error("Secretsの設定エラー: [google] セクション内に GSHEET_ID が見つかりません。")
     st.stop()
 
-# 接続用キャッシュ
 @st.cache_resource(show_spinner=False)
 def get_gsheet(sheet_id, sheet_name):
     scope = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -69,7 +61,6 @@ def get_gsheet(sheet_id, sheet_name):
     worksheet = client.open_by_key(sheet_id).worksheet(sheet_name)
     return worksheet
 
-# メインシート接続
 try:
     worksheet = get_gsheet(GSHEET_ID, "reservations")
 except Exception as e:
@@ -78,13 +69,11 @@ except Exception as e:
 
 
 # ==========================================
-# 2. データ読み書き（高速化対応）
+# 2. データ読み書き
 # ==========================================
 
-# ★高速化: 15秒間キャッシュ
 @st.cache_data(ttl=15)
 def load_reservations():
-    # リトライ経由で取得（()をつけずに渡す）
     data = run_with_retry(worksheet.get_all_records)
     df = pd.DataFrame(data)
 
@@ -96,10 +85,8 @@ def load_reservations():
         if c not in df.columns:
             df[c] = ""
 
-    # 日付パース
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
 
-    # リスト変換
     def _to_list_cell(x):
         if isinstance(x, (list, tuple)): return list(x)
         if pd.isna(x) or x == "": return []
@@ -114,16 +101,13 @@ def load_reservations():
 def save_reservations(df):
     df_to_save = df.copy()
     
-    # リスト→文字列
     for col in ["participants", "absent", "consider"]:
         if col in df_to_save.columns:
             df_to_save[col] = df_to_save[col].apply(lambda lst: ";".join(lst) if isinstance(lst, (list, tuple)) else (lst if pd.notnull(lst) else ""))
 
-    # 日付→ISO文字列
     if "date" in df_to_save.columns:
         df_to_save["date"] = df_to_save["date"].apply(lambda d: d.isoformat() if isinstance(d, (date, datetime, pd.Timestamp)) else (str(d) if pd.notnull(d) else ""))
 
-    # NaN削除
     df_to_save = df_to_save.where(pd.notnull(df_to_save), "")
 
     def _serialize_cell(v):
@@ -135,116 +119,69 @@ def save_reservations(df):
     ser_df = df_to_save.map(_serialize_cell)
     values += ser_df.values.tolist()
 
-    # ★リトライ経由で書き込み & キャッシュクリア
     run_with_retry(worksheet.clear)
     run_with_retry(worksheet.update, values)
     load_reservations.clear()
 
 
 # ==========================================
-# 3. 抽選リマインダー (v2.0)
+# 3. 抽選リマインダー
 # ==========================================
-
-# ★追加・変更点: リマインダーデータを1時間(3600秒)キャッシュする関数を作成
-# これにより、画面更新のたびに通信が発生するのを防ぎ、動作を軽くする
 @st.cache_data(ttl=3600)
 def load_lottery_data_cached():
     try:
-        # シート接続（ここもリトライ対応）
         lottery_sheet = get_gsheet(GSHEET_ID, "lottery_periods")
         records = run_with_retry(lottery_sheet.get_all_records)
         return pd.DataFrame(records)
     except Exception:
-        # エラー時は空のデータフレームを返す
         return pd.DataFrame()
 
 def check_and_show_reminders():
-    """
-    lottery_periods シートを読み込み、今日が期間内であればメッセージを表示する
-    columns: id, title, frequency, start_month, start_day, end_month, end_day, weekdays, messages, enabled
-    """
-    try:
-        # ★変更点: 毎回通信せず、キャッシュ関数からデータを取得する
-        df = load_lottery_data_cached()
-        
-        if df.empty:
-            return
+    df = load_lottery_data_cached()
+    if df.empty: return
 
-        # JSTで現在日時を取得
-        jst_now = datetime.utcnow() + timedelta(hours=9)
-        today = jst_now.date()
-        current_day = today.day
-        current_weekday = today.strftime("%a") # Mon, Tue, ...
+    jst_now = datetime.utcnow() + timedelta(hours=9)
+    today = jst_now.date()
+    current_day = today.day
+    current_weekday = today.strftime("%a")
 
-        messages_to_show = []
+    messages_to_show = []
 
-        for _, row in df.iterrows():
-            # 1. 有効フラグチェック (TRUE, true, 1, などの場合有効)
-            enabled_val = str(row.get("enabled", "")).lower()
-            if enabled_val not in ["true", "1", "yes", "有効"]:
-                continue
+    for _, row in df.iterrows():
+        enabled_val = str(row.get("enabled", "")).lower()
+        if enabled_val not in ["true", "1", "yes", "有効"]: continue
 
-            freq = row.get("frequency", "")
-            msg = row.get("messages", "")
-            if not msg:
-                continue
+        freq = row.get("frequency", "")
+        msg = row.get("messages", "")
+        if not msg: continue
 
-            is_match = False
-            
-            try:
-                # --- 毎月 (monthly) ---
-                if freq == "monthly":
-                    s_day = int(row.get("start_day", 0))
-                    e_day = int(row.get("end_day", 32))
-                    # 日付が範囲内か
-                    if s_day <= current_day <= e_day:
-                        is_match = True
+        is_match = False
+        try:
+            if freq == "monthly":
+                s_day = int(row.get("start_day", 0))
+                e_day = int(row.get("end_day", 32))
+                if s_day <= current_day <= e_day: is_match = True
+            elif freq == "weekly":
+                if current_weekday in str(row.get("weekdays", "")): is_match = True
+            elif freq == "yearly":
+                s_month = int(row.get("start_month", 0))
+                s_day = int(row.get("start_day", 0))
+                e_month = int(row.get("end_month", 0))
+                e_day = int(row.get("end_day", 0))
+                if s_month > 0:
+                    start_date = date(today.year, s_month, s_day)
+                    end_date = date(today.year, e_month, e_day)
+                    if start_date > end_date: 
+                        if today >= start_date or today <= end_date: is_match = True
+                    else:
+                        if start_date <= today <= end_date: is_match = True
+        except: continue
 
-                # --- 毎週 (weekly) ---
-                elif freq == "weekly":
-                    # "Mon,Thu" のような文字列を想定
-                    target_wds = str(row.get("weekdays", ""))
-                    if current_weekday in target_wds:
-                        is_match = True
+        if is_match: messages_to_show.append(msg)
 
-                # --- 毎年 (yearly) ---
-                elif freq == "yearly":
-                    s_month = int(row.get("start_month", 0))
-                    s_day = int(row.get("start_day", 0))
-                    e_month = int(row.get("end_month", 0))
-                    e_day = int(row.get("end_day", 0))
-
-                    if s_month > 0 and e_month > 0:
-                        # 期間開始日と終了日を datetime オブジェクト（年は現在）で比較用に作成
-                        start_date = date(today.year, s_month, s_day)
-                        end_date = date(today.year, e_month, e_day)
-
-                        # 年をまたぐ場合（例: 12月〜1月）の対応
-                        if start_date > end_date:
-                            # 今日が「開始日以降」または「終了日以前」ならOK
-                            if today >= start_date or today <= end_date:
-                                is_match = True
-                        else:
-                            # 通常の期間（例: 5月〜6月）
-                            if start_date <= today <= end_date:
-                                is_match = True
-
-            except Exception as e:
-                # データ変換エラー等はスキップ
-                print(f"Reminder Check Error row: {e}")
-                continue
-
-            if is_match:
-                messages_to_show.append(msg)
-
-        # メッセージ表示
-        if messages_to_show:
-            for m in messages_to_show:
-                # 目立つように info または warning で表示
-                st.info(f"🔔{m}", icon=None)
-
-    except Exception as e:
-        print(f"Reminder Error: {e}")
+    if messages_to_show:
+        for m in messages_to_show:
+            st.info(f"🔔 {m}", icon="📢")
 
 
 # ==========================================
@@ -262,20 +199,7 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 
 check_and_show_reminders()
 
-# ===== データ読み込み =====
 df_res = load_reservations()
-
-# ★追加修正: 編集中(active_event_idxあり)なら、カレンダーの日付をそのイベントの日に強制固定する
-# これを「カレンダー描画前」にやることで、確実にその月が表示されます
-if st.session_state.get('active_event_idx') is not None:
-    idx = st.session_state['active_event_idx']
-    # データが存在するか確認
-    if idx in df_res.index:
-        target_date = df_res.loc[idx]["date"]
-        # 日付をセッションに保存（これでカレンダーがここを開く）
-        st.session_state['clicked_date'] = str(target_date)
-
-# ===== カレンダーイベント生成 =====
 
 status_color = {
     "確保": {"bg":"#90ee90","text":"black"},
@@ -286,25 +210,19 @@ status_color = {
 
 events = []
 for idx, r in df_res.iterrows():
-    # 日付データの安全な取り出し
     raw_date = r.get("date")
     if pd.isna(raw_date) or raw_date == "": continue
-    
-    # 型チェック強化
     if isinstance(raw_date, str):
         try: curr_date = datetime.fromisoformat(str(raw_date)[:10]).date()
         except: continue
-    else:
-        curr_date = raw_date
+    else: curr_date = raw_date
 
-    # 時間データの安全な取り出し
     s_hour = safe_int(r.get("start_hour"), 9)
     s_min  = safe_int(r.get("start_minute"), 0)
     e_hour = safe_int(r.get("end_hour"), 11)
     e_min  = safe_int(r.get("end_minute"), 0)
 
     try:
-        # ★重要: ここで dt_time を使用 (time だとエラーになります)
         start_dt = datetime.combine(curr_date, dt_time(s_hour, s_min))
         end_dt   = datetime.combine(curr_date, dt_time(e_hour, e_min))
     except Exception: continue
@@ -330,12 +248,10 @@ tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
-    # カレンダー初期位置の固定
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
 
-    # 月単位でIDを変えて再描画させる設定
     cal_key = str(initial_date)[:7]
 
     cal_state = calendar(
@@ -357,20 +273,14 @@ with tab_calendar:
 
 # === タブ2: 予約リスト表示 ===
 with tab_list:
-    # --- フィルタ設定エリア ---
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
-    
-    # 表示用にデータを整形
     df_list = df_res.copy()
     
     if not df_list.empty:
-        # 1. 過去データのフィルタリング
         if not show_past:
-            # JSTの今日を取得
             today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
             df_list = df_list[df_list['date'] >= today_jst]
 
-        # 2. 時間を「09:00 - 11:00」形式に
         def format_time_range(r):
             sh = int(safe_int(r.get('start_hour')))
             sm = int(safe_int(r.get('start_minute')))
@@ -380,7 +290,6 @@ with tab_list:
         
         df_list['時間'] = df_list.apply(format_time_range, axis=1)
         
-        # 3. 参加者リストを文字列に変換
         def format_list_col(lst):
             if isinstance(lst, list): return ", ".join(lst)
             return str(lst)
@@ -388,7 +297,6 @@ with tab_list:
         df_list['参加者'] = df_list['participants'].apply(format_list_col)
         df_list['保留'] = df_list['consider'].apply(format_list_col)
 
-        # 4. 日付に曜日を追加する
         def format_date_with_weekday(d):
             if not isinstance(d, (date, datetime)): return str(d)
             weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
@@ -396,36 +304,22 @@ with tab_list:
             return f"{d.strftime('%Y-%m-%d')} {wd}"
 
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
-
-        # ★追加: 日付と時間を結合して「日時」列を作る
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         
-        # 5. 表示カラムの整理（日付・時間を削除し、日時を追加）
         display_cols = ['日時', 'facility', 'status', '参加者', '保留', 'message']
-        col_map = {
-            'facility': '施設',
-            'status': '状態',
-            'message': 'メモ'
-        }
+        col_map = {'facility': '施設', 'status': '状態', 'message': 'メモ'}
         
         final_cols = []
         rename_dict = {}
         for c in display_cols:
-            if c in df_list.columns:
-                final_cols.append(c)
-            elif c in col_map and col_map[c] in df_list.columns:
-                pass 
-            elif c in col_map: 
-                final_cols.append(c)
-                rename_dict[c] = col_map[c]
+            if c in df_list.columns: final_cols.append(c)
+            elif c in col_map and col_map[c] in df_list.columns: pass 
+            elif c in col_map: final_cols.append(c); rename_dict[c] = col_map[c]
 
         df_display = df_list[final_cols].rename(columns=rename_dict)
-        
-        # ソート（文字列だがYYYY-MM-DD始まりなので正しく並ぶ）
         if '日時' in df_display.columns:
             df_display = df_display.sort_values('日時', ascending=True)
 
-        # 6. 表を表示
         event_selection = st.dataframe(
             df_display,
             use_container_width=True,
@@ -434,7 +328,6 @@ with tab_list:
             selection_mode="single-row",
             key="reservation_list_table",
             column_config={
-                # width設定: 日時は長くなるのでmedium〜large確保
                 "日時": st.column_config.TextColumn("日時", width="medium"),
                 "施設": st.column_config.TextColumn("施設", width="medium"),
                 "状態": st.column_config.TextColumn("状態", width="small"),
@@ -444,36 +337,25 @@ with tab_list:
             }
         )
         
-        # クリックされたらIDを特定して、スイッチをONにする
         if len(event_selection.selection.rows) > 0:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            # 「今選ばれている行」と「新しくクリックした行」が違う場合だけ処理する
-            # (これがないと無限リロードになる可能性があります)
             if st.session_state.get('active_event_idx') != actual_idx:
-                
-                # 1. どのイベントか記憶
                 st.session_state['active_event_idx'] = actual_idx
-                
-                # 2. カレンダーの月も連動
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
-                
-                # 3. ★重要: 直接ダイアログを呼ばず、スイッチをONにする
                 st.session_state['popup_mode'] = "edit"
-                
-                # 4. 再実行して、下の「表示制御」ブロックに任せる
                 st.rerun()
     else:
         st.info("表示できる予約データがありません。")
 
+
 # ==========================================
-# 5. ポップアップ画面の定義
+# 6. ポップアップ画面の定義
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
-    # --- A. 新規登録モード ---
     if mode == "new":
         display_date = to_jst_date(date_str)
         st.write(f"📅 日付: {display_date}")
@@ -516,12 +398,9 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
                 save_reservations(updated_df)
                 st.success("登録しました")
-                
-                # ★追加: 処理完了時にモードを解除する（これでポップアップが閉じる）
                 st.session_state['popup_mode'] = None
                 st.rerun()
 
-    # --- B. 編集モード ---
     elif mode == "edit" and idx is not None:
         if idx not in df_res.index:
             st.error("このイベントは削除されています")
@@ -529,7 +408,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         r = df_res.loc[idx]
         
-        # 参加者リストの表示整形
         def clean_join(lst):
             if not isinstance(lst, list): return 'なし'
             valid_names = [str(x) for x in lst if x and str(x).strip() != '']
@@ -542,7 +420,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
         st.divider()
 
-        # 参加表明
         st.subheader("参加表明")
         past_nicks = []
         for col in ["participants", "absent", "consider"]:
@@ -583,7 +460,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     
                     save_reservations(current_df)
                     st.success("反映しました")
-                    # ★追加: モード解除
                     st.session_state['popup_mode'] = None
                     st.rerun()
 
@@ -599,7 +475,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df.at[idx, "status"] = new_status
                     save_reservations(current_df)
                     st.success("更新しました")
-                    # ★追加: モード解除
                     st.session_state['popup_mode'] = None
                     st.rerun()
 
@@ -610,79 +485,56 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = current_df.drop(idx).reset_index(drop=True)
                     save_reservations(current_df)
                     st.success("削除しました")
-                    # ★追加: モード解除
                     st.session_state['popup_mode'] = None
                     st.rerun()
 
 
 # ==========================================
-# 6. イベントハンドリング（ナビゲーション時は強制リセット）
+# 7. イベントハンドリング（★修正の核心部分）
 # ==========================================
 
-# 状態変数の初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
-# 変数1: 前回のカレンダー状態全体
 if 'prev_cal_state' not in st.session_state:
     st.session_state['prev_cal_state'] = None
 
-# 変数2: 前回の表示開始日（月を識別するため）
-if 'last_view_start' not in st.session_state:
-    st.session_state['last_view_start'] = None
-
-# A. カレンダーの操作検知
 if cal_state:
-    # 1. 状態が変わった場合のみ処理する（リロード対策）
+    # 1. 状態が変わった時だけ処理
     if cal_state != st.session_state['prev_cal_state']:
         st.session_state['prev_cal_state'] = cal_state
         
-        # 2. 月（表示範囲）が変わったかをチェック
-        current_view = cal_state.get("view", {})
-        current_start = current_view.get("currentStart")
+        callback = cal_state.get("callback")
         
-        if current_start != st.session_state['last_view_start']:
-            # ★ここが修正の核心（ChatGPTの指摘箇所）★
-            # 月が変わった（ナビゲーション操作）なら、状態を更新し、
-            # 「ポップアップを強制的に閉じる」！
-            st.session_state['last_view_start'] = current_start
+        # 2. ★超重要★
+        # 「dateClick」か「eventClick」の時だけ反応する。
+        # 月移動(datesSet)やTodayなど、他の操作はすべて無視して、ポップアップを閉じる。
+        if callback == "dateClick":
+            clicked_date_str = cal_state["dateClick"]["date"]
+            st.session_state['clicked_date'] = clicked_date_str
+            st.session_state['active_event_idx'] = None
+            st.session_state['popup_mode'] = "new"
+        
+        elif callback == "eventClick":
+            ev = cal_state["eventClick"]["event"]
+            idx = int(ev["id"])
+            st.session_state['active_event_idx'] = idx
             
-            st.session_state['popup_mode'] = None       # 編集モード解除
-            st.session_state['active_event_idx'] = None # 選択解除
+            if idx in df_res.index:
+                target_date = df_res.loc[idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
             
-            # ここで処理終了。クリック判定には進ませない。
+            st.session_state['popup_mode'] = "edit"
         
         else:
-            # 3. 月が変わっていない（＝同じ月の中での操作）場合のみ、クリックを見る
-            callback = cal_state.get("callback")
+            # クリック以外の操作（月移動など）が来たら、強制的にポップアップを閉じる
+            st.session_state['popup_mode'] = None
+            st.session_state['active_event_idx'] = None
 
-            if callback == "dateClick":
-                # 新規モードON
-                clicked_date_str = cal_state["dateClick"]["date"]
-                st.session_state['clicked_date'] = clicked_date_str
-                st.session_state['active_event_idx'] = None
-                st.session_state['popup_mode'] = "new"
-            
-            elif callback == "eventClick":
-                # 編集モードON
-                ev = cal_state["eventClick"]["event"]
-                idx = int(ev["id"])
-                st.session_state['active_event_idx'] = idx
-                
-                if idx in df_res.index:
-                    target_date = df_res.loc[idx]["date"]
-                    st.session_state['clicked_date'] = str(target_date)
-                
-                st.session_state['popup_mode'] = "edit"
-
-# B. リストの操作検知
-# （リスト側のロジックは変更なし）
 
 # ==========================================
-# 7. ポップアップの表示（スイッチが入っていたら出す）
+# 8. ポップアップ表示制御
 # ==========================================
-
-# ★ここが最重要：クリック信号が途切れても、この変数が残っていれば表示され続ける
 if st.session_state['popup_mode'] == "new":
     d_str = st.session_state.get('clicked_date', str(date.today()))
     entry_form_dialog("new", date_str=d_str)
@@ -692,4 +544,4 @@ elif st.session_state['popup_mode'] == "edit":
     if e_idx is not None:
         entry_form_dialog("edit", idx=e_idx)
     else:
-        st.session_state['popup_mode'] = None # IDがないなら閉じる
+        st.session_state['popup_mode'] = None
