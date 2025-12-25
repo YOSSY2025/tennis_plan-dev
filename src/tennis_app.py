@@ -203,7 +203,7 @@ st.markdown("""
 /* ダイアログ内の右上ボタンの余白とテキストのはみ出し防止 */
 .stDialog .stButton>button {
     font-size: 14px !important;
-    padding: 6px 10px !important;
+    padding: 10px 10px !important;
     min-width: 56px !important;
     max-width: calc(100% - 12px) !important;
 }
