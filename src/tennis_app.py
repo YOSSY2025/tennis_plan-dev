@@ -189,6 +189,10 @@ st.markdown("""
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
+/* ボタンのテキスト折返しを防止（日本語の文字分割も抑止） */
+.stButton>button, .stButton>button:focus { white-space: nowrap !important; word-break: keep-all !important; }
+/* ダイアログ内の右上ボタンの余白を調整（必要に応じて調整してください） */
+.stDialog .stButton>button { padding: 6px 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -425,7 +429,8 @@ if cal_state:
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
     # --- ヘッダーエリア（閉じるボタンを右上に配置） ---
-    col_header_title, col_header_close = st.columns([5, 1])
+    # ヘッダーの右側にある閉じるボタン用の列を小さく固定
+    col_header_title, col_header_close = st.columns([12, 1])
     
     with col_header_close:
         # 右上に配置する「閉じる」ボタン
