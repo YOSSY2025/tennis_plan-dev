@@ -194,15 +194,34 @@ st.markdown("""
     white-space: nowrap !important;
     word-break: keep-all !important;
     box-sizing: border-box !important;
-    min-width: 64px !important;
-    max-width: none !important;
+    min-width: 56px !important;
+    max-width: 100% !important;
     display: inline-block !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
 }
 /* ダイアログ内の右上ボタンの余白とテキストのはみ出し防止 */
 .stDialog .stButton>button {
+    font-size: 14px !important;
     padding: 6px 10px !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
+    min-width: 56px !important;
+    max-width: calc(100% - 12px) !important;
+}
+/* ダイアログ自体を小さい画面に合わせる */
+.stDialog {
+    width: auto !important;
+    max-width: 95vw !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+}
+/* ヘッダーのカラムをフレックスにして余白管理 */
+.stDialog .stColumns, .stDialog .css-1lcbmhc { /* フォールバック: Streamlitのカラムクラス名は変わり得る */
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+}
+@media (max-width: 600px) {
+    .stDialog .stButton>button { font-size: 13px !important; padding: 4px 6px !important; min-width: 48px !important; }
 }
 </style>
 """, unsafe_allow_html=True)
