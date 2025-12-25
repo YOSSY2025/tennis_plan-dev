@@ -616,65 +616,57 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
 
 # ==========================================
-# 6. イベントハンドリング（スイッチを入れる）
+# 6. イベントハンドリング（厳格な判定）
 # ==========================================
 
 # 状態変数の初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
-# ★重要変数1: 前回の「カレンダーの状態」
+# ★重要: 「前回のカレンダーの状態」を記録する変数
 if 'prev_cal_state' not in st.session_state:
     st.session_state['prev_cal_state'] = None
 
-# ★重要変数2: 前回の「表示開始日（月）」
-if 'prev_view_start' not in st.session_state:
-    st.session_state['prev_view_start'] = None
-
 # A. カレンダーの操作検知
 if cal_state:
-    # 1. まず「月（表示範囲）」が変わったかをチェック
-    current_view = cal_state.get("view", {})
-    current_start = current_view.get("currentStart")
-    
-    # 月が変わった場合（初期表示含む）
-    if current_start != st.session_state['prev_view_start']:
-        # 新しい月を記録
-        st.session_state['prev_view_start'] = current_start
-        # カレンダー状態も更新しておく（次の比較のため）
+    # 1. 何か操作があって、前回と状態が違う場合のみ処理する
+    if cal_state != st.session_state['prev_cal_state']:
+        
+        # 状態を更新（これで同じ信号が連続しても無視できる）
         st.session_state['prev_cal_state'] = cal_state
         
-        # ★ここで処理終了！
-        # 月移動の時は、たとえ callback に "dateClick" と書いてあっても無視する
-    
-    else:
-        # 2. 月が変わっていない場合のみ、中身の変化（クリック）をチェック
-        if cal_state != st.session_state['prev_cal_state']:
-            
-            # 状態更新
-            st.session_state['prev_cal_state'] = cal_state
-            
-            # ここで初めて callback を見る
-            callback = cal_state.get("callback")
+        # 2. 操作の種類（callback）を厳密にチェックする
+        callback = cal_state.get("callback")
 
-            if callback == "dateClick":
-                # 新規モードON
-                clicked_date_str = cal_state["dateClick"]["date"]
-                st.session_state['clicked_date'] = clicked_date_str
-                st.session_state['active_event_idx'] = None
-                st.session_state['popup_mode'] = "new"
+        # ★ここが修正のキモ：
+        # 「日付クリック」または「イベントクリック」という文字と完全に一致する時だけONにする。
+        # それ以外（datesSet, viewDidMount, prev, next など）はすべて無視する！
+        
+        if callback == "dateClick":
+            # --- 新規登録モード ---
+            clicked_date_str = cal_state["dateClick"]["date"]
+            st.session_state['clicked_date'] = clicked_date_str
+            st.session_state['active_event_idx'] = None
+            st.session_state['popup_mode'] = "new"
+        
+        elif callback == "eventClick":
+            # --- 編集モード ---
+            ev = cal_state["eventClick"]["event"]
+            idx = int(ev["id"])
+            st.session_state['active_event_idx'] = idx
             
-            elif callback == "eventClick":
-                # 編集モードON
-                ev = cal_state["eventClick"]["event"]
-                idx = int(ev["id"])
-                st.session_state['active_event_idx'] = idx
-                
-                if idx in df_res.index:
-                    target_date = df_res.loc[idx]["date"]
-                    st.session_state['clicked_date'] = str(target_date)
-                
-                st.session_state['popup_mode'] = "edit"
+            if idx in df_res.index:
+                target_date = df_res.loc[idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+            
+            st.session_state['popup_mode'] = "edit"
+        
+        else:
+            # ★重要: 月移動（datesSet）などの場合は、
+            # ポップアップが出るのを防ぐため、念のためモードをNone（閉じる）にする
+            # 既に開いているポップアップを勝手に閉じたくなければ、この行は削除しても良いですが、
+            # 「月移動したら誤爆で開く」のを防ぐにはこれが一番安全です。
+            pass
 
 # B. リストの操作検知
 # （リスト側のロジックは変更なし）
