@@ -616,61 +616,56 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
 
 # ==========================================
-# 6. イベントハンドリング（厳格な判定）
-# ==========================================
-# ==========================================
-# 6. イベントハンドリング（重複排除・厳格化）
+# 6. イベントハンドリング（ナビゲーション優先・誤爆防止）
 # ==========================================
 
 # 状態変数の初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
-# ★重要: 「最後に処理したクリックの指紋（署名）」を保存する変数
-# これを使って「さっきと同じクリック情報」を完全に無視します
-if 'last_processed_signature' not in st.session_state:
-    st.session_state['last_processed_signature'] = None
+# ★変数1: 前回のカレンダー状態全体
+if 'prev_cal_state' not in st.session_state:
+    st.session_state['prev_cal_state'] = None
+
+# ★変数2: 前回の表示開始日（月を識別するため）
+if 'last_view_start' not in st.session_state:
+    st.session_state['last_view_start'] = None
 
 # A. カレンダーの操作検知
 if cal_state:
-    callback = cal_state.get("callback")
+    # 1. そもそも状態が変わっていない（リロードなど）なら何もしない
+    if cal_state == st.session_state['prev_cal_state']:
+        pass
     
-    # 1. まず、処理対象としたい操作かどうかをチェック
-    # 「日付クリック」か「イベントクリック」以外はすべて門前払いする
-    if callback in ["dateClick", "eventClick"]:
+    else:
+        # 状態が変わったので、まずは記録を更新
+        st.session_state['prev_cal_state'] = cal_state
         
-        # 2. クリックごとの「指紋（署名）」を作成する
-        current_signature = None
+        # 2. 【最優先判定】「月（表示範囲）」が変わったかを確認
+        current_view = cal_state.get("view", {})
+        current_start = current_view.get("currentStart")
         
-        if callback == "dateClick":
-            # 例: "date_2025-12-21"
-            date_val = cal_state["dateClick"]["date"]
-            current_signature = f"date_{date_val}"
+        if current_start != st.session_state['last_view_start']:
+            # ★月が変わった場合（Prev/Next/Todayを押した時）
+            # 新しい月を記録して、ここで処理を強制終了する！
+            # (たとえ callback に "dateClick" が残っていても、ここでは絶対に読まない)
+            st.session_state['last_view_start'] = current_start
             
-        elif callback == "eventClick":
-            # 例: "event_5"
-            event_id = cal_state["eventClick"]["event"]["id"]
-            current_signature = f"event_{event_id}"
-        
-        # 3. ★ここが最重要判定★
-        # 「今回の指紋」が「前回処理した指紋」と違う場合のみ実行する。
-        # これにより、月移動などで古いクリック情報が再送されてきても、
-        # 指紋が同じなので無視される（if文に入らない）。
-        if current_signature is not None and current_signature != st.session_state['last_processed_signature']:
-            
-            # 新しい操作として記録（上書き）
-            st.session_state['last_processed_signature'] = current_signature
-            
-            # --- 実際の処理 ---
+        else:
+            # 3. 月が変わっていない（＝同じ月の中での操作）場合のみ、クリックを見る
+            callback = cal_state.get("callback")
+
             if callback == "dateClick":
                 # 新規モードON
-                st.session_state['clicked_date'] = cal_state["dateClick"]["date"]
+                clicked_date_str = cal_state["dateClick"]["date"]
+                st.session_state['clicked_date'] = clicked_date_str
                 st.session_state['active_event_idx'] = None
                 st.session_state['popup_mode'] = "new"
             
             elif callback == "eventClick":
                 # 編集モードON
-                idx = int(cal_state["eventClick"]["event"]["id"])
+                ev = cal_state["eventClick"]["event"]
+                idx = int(ev["id"])
                 st.session_state['active_event_idx'] = idx
                 
                 if idx in df_res.index:
@@ -679,7 +674,7 @@ if cal_state:
                 
                 st.session_state['popup_mode'] = "edit"
 
-# B. リストの操作検知（タブ2側での選択）
+# B. リストの操作検知
 # （リスト側のロジックは変更なし）
 
 # ==========================================
