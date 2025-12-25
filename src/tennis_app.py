@@ -623,54 +623,67 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
-# ★追加: 「最後に処理したクリックの内容」を記録する変数
+# ★追加1: 「前回のクリック内容」を記録
 if 'last_clicked_signature' not in st.session_state:
     st.session_state['last_clicked_signature'] = None
 
+# ★追加2: 「現在表示している月（開始日）」を記録
+if 'last_view_start' not in st.session_state:
+    st.session_state['last_view_start'] = None
+
 # A. カレンダーの操作検知
 if cal_state:
-    callback = cal_state.get("callback")
+    # 1. まず「月（ビュー）」が変わったかどうかを判定
+    current_view = cal_state.get("view", {})
+    current_start = current_view.get("currentStart")
     
-    # 今クリックされているものの「正体（署名）」を作る
-    current_signature = None
-    
-    if callback == "dateClick":
-        # 例: "date_2025-03-09"
-        current_signature = f"date_{cal_state['dateClick']['date']}"
-    elif callback == "eventClick":
-        # 例: "event_12"
-        current_signature = f"event_{cal_state['eventClick']['event']['id']}"
+    # 前回の表示月と比較
+    if current_start != st.session_state['last_view_start']:
+        # ★月が変わった場合
+        # 新しい月を記録して、今回は「何もしない（クリック情報は無視）」
+        st.session_state['last_view_start'] = current_start
+        # ここで処理を終了（pass）することで、月移動時のポップアップ誤爆を100%防ぐ
+        pass
 
-    # ★重要判定:
-    # 1. 何かクリック情報がある (current_signature is not None)
-    # 2. それが前回処理したものと違う ( != last_clicked_signature )
-    # この2つを満たす時だけ、「新しい操作」として認める
-    if current_signature and current_signature != st.session_state['last_clicked_signature']:
+    else:
+        # ★月が変わっていない場合のみ、クリック判定を行う
+        callback = cal_state.get("callback")
         
-        # 新しい操作として記録
-        st.session_state['last_clicked_signature'] = current_signature
-
+        # クリック内容の署名作成
+        current_signature = None
         if callback == "dateClick":
-            # 日付クリック -> 新規モードON
-            clicked_date_str = cal_state["dateClick"]["date"]
-            st.session_state['clicked_date'] = clicked_date_str
-            st.session_state['active_event_idx'] = None
-            st.session_state['popup_mode'] = "new"
-        
+            current_signature = f"date_{cal_state['dateClick']['date']}"
         elif callback == "eventClick":
-            # イベントクリック -> 編集モードON
-            ev = cal_state["eventClick"]["event"]
-            idx = int(ev["id"])
-            st.session_state['active_event_idx'] = idx
+            current_signature = f"event_{cal_state['eventClick']['event']['id']}"
+
+        # 「署名が存在する」かつ「前回と違う」場合だけ反応する
+        if current_signature and current_signature != st.session_state['last_clicked_signature']:
             
-            if idx in df_res.index:
-                target_date = df_res.loc[idx]["date"]
-                st.session_state['clicked_date'] = str(target_date)
+            # 新しいクリックとして記録
+            st.session_state['last_clicked_signature'] = current_signature
+
+            if callback == "dateClick":
+                # 新規モードON
+                clicked_date_str = cal_state["dateClick"]["date"]
+                st.session_state['clicked_date'] = clicked_date_str
+                st.session_state['active_event_idx'] = None
+                st.session_state['popup_mode'] = "new"
             
-            st.session_state['popup_mode'] = "edit"
+            elif callback == "eventClick":
+                # 編集モードON
+                ev = cal_state["eventClick"]["event"]
+                idx = int(ev["id"])
+                st.session_state['active_event_idx'] = idx
+                
+                if idx in df_res.index:
+                    target_date = df_res.loc[idx]["date"]
+                    st.session_state['clicked_date'] = str(target_date)
+                
+                st.session_state['popup_mode'] = "edit"
 
 # B. リストの操作検知（タブ2側での選択）
 # （リスト表示処理の中で直接 st.rerun しているので、ここはカレンダー専用でOK）
+
 
 # ==========================================
 # 7. ポップアップの表示（スイッチが入っていたら出す）
