@@ -13,6 +13,7 @@ from gspread.exceptions import APIError
 # 1. 共通関数・設定
 # ==========================================
 
+# API制限対策
 def run_with_retry(func, *args, **kwargs):
     max_retries = 5
     for i in range(max_retries):
@@ -141,7 +142,9 @@ def check_and_show_reminders():
 
     jst_now = datetime.utcnow() + timedelta(hours=9)
     today = jst_now.date()
-    
+    current_day = today.day
+    current_weekday = today.strftime("%a")
+
     messages_to_show = []
 
     for _, row in df.iterrows():
@@ -157,9 +160,9 @@ def check_and_show_reminders():
             if freq == "monthly":
                 s_day = int(row.get("start_day", 0))
                 e_day = int(row.get("end_day", 32))
-                if s_day <= today.day <= e_day: is_match = True
+                if s_day <= current_day <= e_day: is_match = True
             elif freq == "weekly":
-                if today.strftime("%a") in str(row.get("weekdays", "")): is_match = True
+                if current_weekday in str(row.get("weekdays", "")): is_match = True
             elif freq == "yearly":
                 s_month = int(row.get("start_month", 0))
                 s_day = int(row.get("start_day", 0))
@@ -197,9 +200,6 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 check_and_show_reminders()
 
 df_res = load_reservations()
-
-if 'list_reset_counter' not in st.session_state:
-    st.session_state['list_reset_counter'] = 0
 
 status_color = {
     "確保": {"bg":"#90ee90","text":"black"},
@@ -320,15 +320,13 @@ with tab_list:
         if '日時' in df_display.columns:
             df_display = df_display.sort_values('日時', ascending=True)
 
-        table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
-
         event_selection = st.dataframe(
             df_display,
             use_container_width=True,
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
-            key=table_key,
+            key="reservation_list_table",
             column_config={
                 "日時": st.column_config.TextColumn("日時", width="medium"),
                 "施設": st.column_config.TextColumn("施設", width="medium"),
@@ -354,84 +352,7 @@ with tab_list:
 
 
 # ==========================================
-# 6. イベントハンドリング（★完全修正版）
-# ==========================================
-
-# 変数初期化
-if 'popup_mode' not in st.session_state:
-    st.session_state['popup_mode'] = None
-
-if 'prev_cal_state' not in st.session_state:
-    st.session_state['prev_cal_state'] = None
-
-if 'last_view_start' not in st.session_state:
-    st.session_state['last_view_start'] = None
-
-if 'last_clicked_signature' not in st.session_state:
-    st.session_state['last_clicked_signature'] = None
-
-# A. カレンダーの操作検知
-if cal_state:
-    # 1. 何か操作があった（状態が変わった）場合のみ処理開始
-    if cal_state != st.session_state['prev_cal_state']:
-        
-        # 状態を更新（リロード対策）
-        st.session_state['prev_cal_state'] = cal_state
-        
-        # 2. 【最優先】月（ビュー範囲）が変わったかどうかチェック
-        current_view = cal_state.get("view", {})
-        current_start = current_view.get("currentStart")
-        
-        if current_start != st.session_state['last_view_start']:
-            # ★月が変わった場合（Prev/Next/Today）
-            # 新しい月を記録し、ポップアップ等はすべて強制リセット！
-            st.session_state['last_view_start'] = current_start
-            
-            st.session_state['popup_mode'] = None
-            st.session_state['active_event_idx'] = None
-            st.session_state['list_reset_counter'] += 1
-            
-            # 【重要】ここで処理を終了。下のクリック判定には絶対行かせない。
-        
-        else:
-            # 3. 月が変わっていない場合のみ、クリック判定へ進む
-            callback = cal_state.get("callback")
-            
-            # クリックの指紋（署名）を作成
-            current_signature = None
-            if callback == "dateClick":
-                current_signature = f"date_{cal_state['dateClick']['date']}"
-            elif callback == "eventClick":
-                current_signature = f"event_{cal_state['eventClick']['event']['id']}"
-            
-            # ★「指紋が存在する」かつ「さっきと同じクリックではない」場合のみ反応
-            if current_signature and current_signature != st.session_state['last_clicked_signature']:
-                
-                # 新しいクリックとして記録
-                st.session_state['last_clicked_signature'] = current_signature
-                
-                if callback == "dateClick":
-                    clicked_date_str = cal_state["dateClick"]["date"]
-                    st.session_state['clicked_date'] = clicked_date_str
-                    st.session_state['active_event_idx'] = None
-                    st.session_state['popup_mode'] = "new"
-                    st.session_state['list_reset_counter'] += 1
-                
-                elif callback == "eventClick":
-                    ev = cal_state["eventClick"]["event"]
-                    idx = int(ev["id"])
-                    st.session_state['active_event_idx'] = idx
-                    
-                    if idx in df_res.index:
-                        target_date = df_res.loc[idx]["date"]
-                        st.session_state['clicked_date'] = str(target_date)
-                    
-                    st.session_state['popup_mode'] = "edit"
-                    st.session_state['list_reset_counter'] += 1
-
-
-# ==========================================
-# 7. ポップアップ画面の定義
+# 6. ポップアップ画面の定義
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
@@ -566,6 +487,49 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     st.success("削除しました")
                     st.session_state['popup_mode'] = None
                     st.rerun()
+
+
+# ==========================================
+# 7. イベントハンドリング（★修正の核心部分）
+# ==========================================
+
+if 'popup_mode' not in st.session_state:
+    st.session_state['popup_mode'] = None
+
+if 'prev_cal_state' not in st.session_state:
+    st.session_state['prev_cal_state'] = None
+
+if cal_state:
+    # 1. 状態が変わった時だけ処理
+    if cal_state != st.session_state['prev_cal_state']:
+        st.session_state['prev_cal_state'] = cal_state
+        
+        callback = cal_state.get("callback")
+        
+        # 2. ★超重要★
+        # 「dateClick」か「eventClick」の時だけ反応する。
+        # 月移動(datesSet)やTodayなど、他の操作はすべて無視して、ポップアップを閉じる。
+        if callback == "dateClick":
+            clicked_date_str = cal_state["dateClick"]["date"]
+            st.session_state['clicked_date'] = clicked_date_str
+            st.session_state['active_event_idx'] = None
+            st.session_state['popup_mode'] = "new"
+        
+        elif callback == "eventClick":
+            ev = cal_state["eventClick"]["event"]
+            idx = int(ev["id"])
+            st.session_state['active_event_idx'] = idx
+            
+            if idx in df_res.index:
+                target_date = df_res.loc[idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+            
+            st.session_state['popup_mode'] = "edit"
+        
+        else:
+            # クリック以外の操作（月移動など）が来たら、強制的にポップアップを閉じる
+            st.session_state['popup_mode'] = None
+            st.session_state['active_event_idx'] = None
 
 
 # ==========================================
