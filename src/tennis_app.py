@@ -651,6 +651,10 @@ if cal_state:
             # (たとえ callback に "dateClick" が残っていても、ここでは絶対に読まない)
             st.session_state['last_view_start'] = current_start
             
+            st.session_state['popup_mode'] = None  # ポップアップは閉じる
+            st.session_state['active_event_idx'] = None  # 編集中も解除 する
+            
+
         else:
             # 3. 月が変わっていない（＝同じ月の中での操作）場合のみ、クリックを見る
             callback = cal_state.get("callback")
