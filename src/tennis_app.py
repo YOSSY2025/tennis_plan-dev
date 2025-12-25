@@ -616,45 +616,42 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
 
 # ==========================================
-# 6. イベントハンドリング（ナビゲーション優先・誤爆防止）
+# 6. イベントハンドリング（ナビゲーション時は強制リセット）
 # ==========================================
 
 # 状態変数の初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
-# ★変数1: 前回のカレンダー状態全体
+# 変数1: 前回のカレンダー状態全体
 if 'prev_cal_state' not in st.session_state:
     st.session_state['prev_cal_state'] = None
 
-# ★変数2: 前回の表示開始日（月を識別するため）
+# 変数2: 前回の表示開始日（月を識別するため）
 if 'last_view_start' not in st.session_state:
     st.session_state['last_view_start'] = None
 
 # A. カレンダーの操作検知
 if cal_state:
-    # 1. そもそも状態が変わっていない（リロードなど）なら何もしない
-    if cal_state == st.session_state['prev_cal_state']:
-        pass
-    
-    else:
-        # 状態が変わったので、まずは記録を更新
+    # 1. 状態が変わった場合のみ処理する（リロード対策）
+    if cal_state != st.session_state['prev_cal_state']:
         st.session_state['prev_cal_state'] = cal_state
         
-        # 2. 【最優先判定】「月（表示範囲）」が変わったかを確認
+        # 2. 月（表示範囲）が変わったかをチェック
         current_view = cal_state.get("view", {})
         current_start = current_view.get("currentStart")
         
         if current_start != st.session_state['last_view_start']:
-            # ★月が変わった場合（Prev/Next/Todayを押した時）
-            # 新しい月を記録して、ここで処理を強制終了する！
-            # (たとえ callback に "dateClick" が残っていても、ここでは絶対に読まない)
+            # ★ここが修正の核心（ChatGPTの指摘箇所）★
+            # 月が変わった（ナビゲーション操作）なら、状態を更新し、
+            # 「ポップアップを強制的に閉じる」！
             st.session_state['last_view_start'] = current_start
             
-            st.session_state['popup_mode'] = None  # ポップアップは閉じる
-            st.session_state['active_event_idx'] = None  # 編集中も解除 する
+            st.session_state['popup_mode'] = None       # 編集モード解除
+            st.session_state['active_event_idx'] = None # 選択解除
             
-
+            # ここで処理終了。クリック判定には進ませない。
+        
         else:
             # 3. 月が変わっていない（＝同じ月の中での操作）場合のみ、クリックを見る
             callback = cal_state.get("callback")
