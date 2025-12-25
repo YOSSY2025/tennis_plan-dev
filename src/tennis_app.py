@@ -355,9 +355,10 @@ with tab_list:
 
 
 # ==========================================
-# 6. イベントハンドリング（クリック最優先ロジック）
+# 6. イベントハンドリング（★完全解決版）
 # ==========================================
 
+# 変数初期化
 if 'popup_mode' not in st.session_state:
     st.session_state['popup_mode'] = None
 
@@ -367,47 +368,53 @@ if 'prev_cal_state' not in st.session_state:
 if 'last_view_start' not in st.session_state:
     st.session_state['last_view_start'] = None
 
-if 'last_clicked_signature' not in st.session_state:
-    st.session_state['last_clicked_signature'] = None
+# ★追加: 前回処理した「クリックの署名（ID）」を記録する
+if 'last_handled_click' not in st.session_state:
+    st.session_state['last_handled_click'] = None
 
 if cal_state:
     # 状態が変わった時だけ処理
     if cal_state != st.session_state['prev_cal_state']:
         st.session_state['prev_cal_state'] = cal_state
         
-        callback = cal_state.get("callback")
         current_view = cal_state.get("view", {})
         current_start = current_view.get("currentStart")
-
-        # ---------------------------------------------------------
-        # 判定ロジックの修正：
-        # 「ナビゲーション（閉じる）」よりも「クリック（開く）」を優先して判定する
-        # ---------------------------------------------------------
-
-        # 1. まず「クリック操作」かどうかをチェック（最優先！）
-        is_click_action = False
-        current_signature = None
-
-        if callback == "dateClick":
-            is_click_action = True
-            current_signature = f"date_{cal_state['dateClick']['date']}"
-        elif callback == "eventClick":
-            is_click_action = True
-            current_signature = f"event_{cal_state['eventClick']['event']['id']}"
-
         
-        if is_click_action:
-            # --- クリックされた場合 ---
+        # ------------------------------------------------------------------
+        # 【最優先】 月が変わった（ナビゲーション）かどうかをチェック
+        # ------------------------------------------------------------------
+        if current_start != st.session_state['last_view_start']:
+            # ★月が変わったら、すべての状態をリセットし、処理を強制終了する
+            st.session_state['last_view_start'] = current_start
             
-            # 「前回と同じクリック」でなければ実行（連打防止）
-            if current_signature != st.session_state['last_clicked_signature']:
-                st.session_state['last_clicked_signature'] = current_signature
+            st.session_state['popup_mode'] = None       # ポップアップ閉じる
+            st.session_state['active_event_idx'] = None # 選択解除
+            st.session_state['list_reset_counter'] += 1
+            
+            # 【重要】クリック情報は無視して、ここで抜ける
+        
+        else:
+            # ------------------------------------------------------------------
+            # 【次点】 月が変わっていない場合のみ、クリックをチェック
+            # ------------------------------------------------------------------
+            callback = cal_state.get("callback")
+            
+            # 今回のクリックの「署名」を作る
+            current_signature = None
+            if callback == "dateClick":
+                current_signature = f"date_{cal_state['dateClick']['date']}"
+            elif callback == "eventClick":
+                current_signature = f"event_{cal_state['eventClick']['event']['id']}"
+            
+            # ★重要判定:
+            # 1. クリック情報が存在する
+            # 2. かつ、前回のクリックと違う（＝新しいクリックだ）
+            if current_signature and current_signature != st.session_state['last_handled_click']:
                 
-                # 月情報の更新（クリック時点での月を正とする）
-                st.session_state['last_view_start'] = current_start
-
+                # 新しいクリックとして処理する
+                st.session_state['last_handled_click'] = current_signature
+                
                 if callback == "dateClick":
-                    # 新規モードON
                     clicked_date_str = cal_state["dateClick"]["date"]
                     st.session_state['clicked_date'] = clicked_date_str
                     st.session_state['active_event_idx'] = None
@@ -415,7 +422,6 @@ if cal_state:
                     st.session_state['list_reset_counter'] += 1
                 
                 elif callback == "eventClick":
-                    # 編集モードON
                     ev = cal_state["eventClick"]["event"]
                     idx = int(ev["id"])
                     st.session_state['active_event_idx'] = idx
@@ -426,20 +432,11 @@ if cal_state:
                     
                     st.session_state['popup_mode'] = "edit"
                     st.session_state['list_reset_counter'] += 1
-        
-        else:
-            # --- クリック以外の操作（月移動など）の場合 ---
             
-            # 月（表示範囲）が変わっていたら、ポップアップを閉じる
-            if current_start != st.session_state['last_view_start']:
-                st.session_state['last_view_start'] = current_start
-                
-                # 強制リセット
-                st.session_state['popup_mode'] = None
-                st.session_state['active_event_idx'] = None
-                st.session_state['list_reset_counter'] += 1
-            
-            # 月も変わっておらず、クリックでもない微細な更新なら、何もしない（ポップアップ維持）
+            else:
+                # クリック情報がない、または前回と同じ（亡霊）なら何もしない
+                pass
+
 
 # ==========================================
 # 7. ポップアップ画面の定義
