@@ -271,7 +271,10 @@ with tab_calendar:
             "height": "auto",
             "contentHeight": "auto",
             "aspectRatio": 1.2,
-            "titleFormat": {"year": "numeric", "month": "2-digit"}
+            "titleFormat": {"year": "numeric", "month": "2-digit"},
+
+            # ★追加: スマホでの誤操作防止（0.2秒以上触れないと反応しないようにする）
+            "longPressDelay": 200
         },
         key=f"calendar_{cal_key}"
     )
