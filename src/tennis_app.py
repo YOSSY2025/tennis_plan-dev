@@ -464,7 +464,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
 
-        st.divider()
         col_reg, col_close = st.columns([1, 1])
         with col_reg:
             if st.button("登録する", type="primary", use_container_width=True):
@@ -516,7 +515,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
         st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
-        st.divider()
 
         st.subheader("参加表明")
         past_nicks = []
