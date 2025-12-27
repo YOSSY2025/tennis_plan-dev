@@ -380,19 +380,23 @@ if cal_state:
     if cal_state != st.session_state['prev_cal_state']:
         st.session_state['prev_cal_state'] = cal_state
         
+        # 1. ナビゲーション（月移動）チェック
         current_view = cal_state.get("view", {})
         current_start = current_view.get("currentStart")
         
+        # 前回の開始日と比較するための変数を初期化
         if 'last_view_start' not in st.session_state:
             st.session_state['last_view_start'] = current_start
         
         if current_start != st.session_state['last_view_start']:
+            # 月が変わったら強制リセット
             st.session_state['last_view_start'] = current_start
             st.session_state['is_popup_open'] = False
             st.session_state['active_event_idx'] = None
             st.session_state['list_reset_counter'] += 1
         
         else:
+            # 2. クリックチェック
             callback = cal_state.get("callback")
             current_signature = None
             if callback == "dateClick":
@@ -400,9 +404,12 @@ if cal_state:
             elif callback == "eventClick":
                 current_signature = f"event_{cal_state['eventClick']['event']['id']}"
             
+            # 「新しいクリック」かつ「今閉じてる」なら開く
+            # ※ポップアップが開いている間は、背後のカレンダー操作を無視する
             if current_signature and current_signature != st.session_state['last_click_signature']:
                 st.session_state['last_click_signature'] = current_signature
                 
+                # ポップアップを開く
                 st.session_state['is_popup_open'] = True
                 
                 if callback == "dateClick":
@@ -428,23 +435,20 @@ if cal_state:
 
 
 # ==========================================
-# 7. ポップアップ画面の定義（右上に閉じるボタン・空白削除修正版）
+# 7. ポップアップ画面の定義（閉じるボタン修正版）
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
-    # --- ヘッダーエリア（閉じるボタンを右上に配置） ---
-    col_header_title, col_header_close = st.columns([5, 1])
-    
-    with col_header_close:
-        if st.button("閉じる", key="btn_close_top"):
-            st.session_state['is_popup_open'] = False
-            st.rerun()
-
-    # --- A. 新規登録モード ---
+    # --- ヘッダー ---
+    # modeに応じて内容を変える
     if mode == "new":
         display_date = to_jst_date(date_str)
-        st.write(f"📅 **日付:** {display_date}")
-        
+        st.write(f"📅 **新規登録:** {display_date}")
+    elif mode == "edit":
+        st.write("📝 **予約の編集・参加**")
+
+    # --- フォーム本体 ---
+    if mode == "new":
         past_facilities = []
         if 'facility' in df_res.columns:
             past_facilities = df_res['facility'].dropna().unique().tolist()
@@ -460,58 +464,58 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
 
-        # ★空白行削除のためのCSSハック
-        st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
         st.divider()
-
-        if st.button("登録する", type="primary", use_container_width=True):
-            if facility == "":
-                st.error("⚠️ 施設名を選択してください")
-            elif end_time <= start_time:
-                st.error("⚠️ 終了時間は開始時間より後にしてください")
-            else:
-                new_row = {
-                    "date": to_jst_date(date_str),
-                    "facility": facility,
-                    "status": status,
-                    "start_hour": start_time.hour,
-                    "start_minute": start_time.minute,
-                    "end_hour": end_time.hour,
-                    "end_minute": end_time.minute,
-                    "participants": [],
-                    "absent": [],
-                    "consider": [],
-                    "message": message.replace('\n', '<br>')
-                }
-                current_df = load_reservations()
-                updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
-                save_reservations(updated_df)
-                st.success("登録しました")
+        col_reg, col_close = st.columns([1, 1])
+        with col_reg:
+            if st.button("登録する", type="primary", use_container_width=True):
+                if facility == "":
+                    st.error("⚠️ 施設名を選択してください")
+                elif end_time <= start_time:
+                    st.error("⚠️ 終了時間は開始時間より後にしてください")
+                else:
+                    new_row = {
+                        "date": to_jst_date(date_str),
+                        "facility": facility,
+                        "status": status,
+                        "start_hour": start_time.hour,
+                        "start_minute": start_time.minute,
+                        "end_hour": end_time.hour,
+                        "end_minute": end_time.minute,
+                        "participants": [],
+                        "absent": [],
+                        "consider": [],
+                        "message": message.replace('\n', '<br>')
+                    }
+                    current_df = load_reservations()
+                    updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
+                    save_reservations(updated_df)
+                    st.success("登録しました")
+                    st.session_state['is_popup_open'] = False
+                    st.rerun()
+        with col_close:
+            if st.button("閉じる", use_container_width=True):
                 st.session_state['is_popup_open'] = False
                 st.rerun()
 
-    # --- B. 編集モード ---
     elif mode == "edit" and idx is not None:
         if idx not in df_res.index:
             st.error("このイベントは削除されています")
+            if st.button("閉じる"):
+                st.session_state['is_popup_open'] = False
+                st.rerun()
             return
 
         r = df_res.loc[idx]
-        
         def clean_join(lst):
             if not isinstance(lst, list): return 'なし'
             valid_names = [str(x) for x in lst if x and str(x).strip() != '']
             return ', '.join(valid_names) if valid_names else 'なし'
 
-        # 情報表示
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
         st.markdown(f"**施設:** {r['facility']} （{r['status']}）")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
         st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
-        
-        # ★空白行削除のためのCSSハック
-        st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
         st.divider()
 
         st.subheader("参加表明")
@@ -527,35 +531,40 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_nick:
             nick_choice = st.selectbox("名前", options=["(選択)"] + past_nicks + ["新規入力"], key="edit_nick")
             nick = st.text_input("名前を入力", key="edit_nick_input") if nick_choice == "新規入力" else (nick_choice if nick_choice != "(選択)" else "")
-        
         with col_type:
             part_type = st.radio("区分", ["参加", "保留", "削除"], horizontal=True, key="edit_type")
 
-        if st.button("反映する", type="primary", use_container_width=True):
-            if not nick:
-                st.warning("名前を選択してください")
-            else:
-                current_df = load_reservations()
-                if idx in current_df.index:
-                    participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
-                    absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
-                    consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
+        col_upd, col_close_main = st.columns([1, 1])
+        with col_upd:
+            if st.button("反映する", type="primary", use_container_width=True):
+                if not nick:
+                    st.warning("名前を選択してください")
+                else:
+                    current_df = load_reservations()
+                    if idx in current_df.index:
+                        participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
+                        absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
+                        consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
 
-                    if nick in participants: participants.remove(nick)
-                    if nick in absent: absent.remove(nick)
-                    if nick in consider: consider.remove(nick)
+                        if nick in participants: participants.remove(nick)
+                        if nick in absent: absent.remove(nick)
+                        if nick in consider: consider.remove(nick)
 
-                    if part_type == "参加": participants.append(nick)
-                    elif part_type == "保留": consider.append(nick)
-                    
-                    current_df.at[idx, "participants"] = participants
-                    current_df.at[idx, "absent"] = absent
-                    current_df.at[idx, "consider"] = consider
-                    
-                    save_reservations(current_df)
-                    st.success("反映しました")
-                    st.session_state['is_popup_open'] = False
-                    st.rerun()
+                        if part_type == "参加": participants.append(nick)
+                        elif part_type == "保留": consider.append(nick)
+                        
+                        current_df.at[idx, "participants"] = participants
+                        current_df.at[idx, "absent"] = absent
+                        current_df.at[idx, "consider"] = consider
+                        
+                        save_reservations(current_df)
+                        st.success("反映しました")
+                        st.session_state['is_popup_open'] = False
+                        st.rerun()
+        with col_close_main:
+            if st.button("閉じる", use_container_width=True):
+                st.session_state['is_popup_open'] = False
+                st.rerun()
 
         with st.expander("管理者メニュー（編集・削除）"):
             edit_tab, delete_tab = st.tabs(["内容編集", "削除"])
@@ -584,7 +593,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
 
 # ==========================================
-# 8. ポップアップ表示制御（フラグがTRUEの時だけ表示）
+# 8. ポップアップ表示制御
 # ==========================================
 if st.session_state['is_popup_open']:
     if st.session_state['popup_mode'] == "new":
