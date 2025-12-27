@@ -273,8 +273,8 @@ with tab_calendar:
             "aspectRatio": 1.2,
             "titleFormat": {"year": "numeric", "month": "2-digit"},
 
-            # ★追加: スマホでの誤操作防止（0.2秒以上触れないと反応しないようにする）
-            "longPressDelay": 200
+            # ★追加: スマホでの誤操作防止（0.4秒以上触れないと反応しないようにする）
+            "longPressDelay": 400
         },
         key=f"calendar_{cal_key}"
     )
