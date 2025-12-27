@@ -186,32 +186,18 @@ def check_and_show_reminders():
 # ==========================================
 st.markdown("""
 <style>
-
-/* --- ポップアップの表示位置修正 --- */
-
-/* 1. ポップアップの大枠（オーバーレイ） */
-div[data-testid="stDialog"] {
-    align-items: flex-start !important; /* ★重要: 上下中央揃えをやめて「上詰め」にする */
-    padding-top: 20px !important;       /* 上に少し隙間を空ける */
-    padding-bottom: 20px !important;    /* 下にも隙間を空ける */
-}
-
-/* 2. ポップアップの中身（スクロール領域） */
+/* スマホでのポップアップスクロール対策 */
 div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
-    overflow-y: auto !important;        /* スクロール有効化 */
-    max-height: 85dvh !important;       /* 画面高さの85%以内に収める（アドレスバー対策のdvh） */
-    overscroll-behavior: contain !important; /* バウンド防止 */
-    -webkit-overflow-scrolling: touch !important; /* 滑らかスクロール */
-    display: block !important;          /* レイアウト崩れ防止 */
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    max-height: 85vh !important;
+    -webkit-overflow-scrolling: touch !important; /* スマホでのスクロールを滑らかにする */            
 }
-
-/* --- アプリ全体の余白調整 --- */
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
 </style>
-""", unsafe_allow_html=True)            
-
+""", unsafe_allow_html=True)
 
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
 
