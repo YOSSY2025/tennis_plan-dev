@@ -190,6 +190,7 @@ st.markdown("""
 div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
     overflow-y: auto !important;
     max-height: 85vh !important;
+    -webkit-overflow-scrolling: touch !important; /* スマホでのスクロールを滑らかにする */            
 }
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
