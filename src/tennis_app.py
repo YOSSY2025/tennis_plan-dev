@@ -192,6 +192,8 @@ div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
     overflow-y: auto !important;
     max-height: 85vh !important;
     -webkit-overflow-scrolling: touch !important; /* スマホでのスクロールを滑らかにする */            
+    pedding-top:20px !important;
+   pedding-bottom:20px !important;
 }
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
