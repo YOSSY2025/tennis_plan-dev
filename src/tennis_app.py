@@ -313,6 +313,8 @@ with tab_list:
     # タブが選択されたときの状態更新（ポップアップは保持）
     if st.session_state.get('active_tab') != 1:
         st.session_state['active_tab'] = 1
+        # タブ切り替え時は選択状態をリセット
+        st.session_state['last_selected_idx'] = None
     
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
@@ -384,12 +386,14 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            # 選択されたアイテムのポップアップを表示
-            st.session_state['active_event_idx'] = actual_idx
-            target_date = df_res.loc[actual_idx]["date"]
-            st.session_state['clicked_date'] = str(target_date)
-            st.session_state['is_popup_open'] = True
-            st.session_state['popup_mode'] = "edit"
+            # 新しい選択時のみポップアップを表示（重複防止）
+            if st.session_state.get('last_selected_idx') != actual_idx:
+                st.session_state['last_selected_idx'] = actual_idx
+                st.session_state['active_event_idx'] = actual_idx
+                target_date = df_res.loc[actual_idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+                st.session_state['is_popup_open'] = True
+                st.session_state['popup_mode'] = "edit"
     else:
         st.info("表示できる予約データがありません。")
 
