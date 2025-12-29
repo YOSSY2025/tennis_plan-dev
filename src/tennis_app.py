@@ -274,14 +274,19 @@ for idx, r in df_res.iterrows():
 if 'active_tab' not in st.session_state:
     st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
 
+# タブ切り替えの検知と制御
+if 'tab_switch_lock' not in st.session_state:
+    st.session_state['tab_switch_lock'] = False
+
 tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
-    # タブが選択されたときの状態更新（ポップアップは保持）
-    if st.session_state.get('active_tab') != 0:
-        st.session_state['active_tab'] = 0
-        st.session_state['list_reset_counter'] += 1
+    # リストタブからの自動切り替えを防止
+    if not st.session_state.get('tab_switch_lock', False):
+        if st.session_state.get('active_tab') != 0:
+            st.session_state['active_tab'] = 0
+            st.session_state['list_reset_counter'] += 1
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
@@ -310,6 +315,9 @@ with tab_calendar:
 
 # === タブ2: 予約リスト表示 ===
 with tab_list:
+    # リストタブでの操作時はタブ切り替えをロック
+    st.session_state['tab_switch_lock'] = True
+    
     # タブが選択されたときの状態更新（ポップアップは保持）
     if st.session_state.get('active_tab') != 1:
         st.session_state['active_tab'] = 1
@@ -395,6 +403,10 @@ with tab_list:
                 st.rerun()
     else:
         st.info("表示できる予約データがありません。")
+
+# リストタブの処理終了時にロックを解除
+if st.session_state.get('active_tab') == 1:
+    st.session_state['tab_switch_lock'] = False
 
 
 # ==========================================
