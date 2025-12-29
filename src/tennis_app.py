@@ -182,32 +182,31 @@ def check_and_show_reminders():
 
 
 # ==========================================
-# 4. 画面描画
+# 4. 画面描画 (CSS調整含む)
 # ==========================================
 st.markdown("""
 <style>
 /* --- ポップアップの表示位置とスクロール統一 --- */
-
 /* 1. ポップアップの大枠（グレーの背景部分） */
 div[data-testid="stDialog"] {
-    align-items: flex-start !important; /* 上詰めにする */
-    overflow-y: auto !important;        /* ここでスクロールさせる（一本化） */
+    align-items: flex-start !important; /* 上詰め */
+    overflow-y: auto !important;        /* ここでスクロールさせる */
     -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior: contain !important; /* 背景のカレンダーを動かさない */
+    overscroll-behavior: contain !important;
 }
 
 /* 2. ポップアップの白い箱（コンテンツ本体） */
 div[data-testid="stDialog"] > div:first-child {
     margin-top: 10px !important;
-    margin-bottom: 50px !important;     /* 下に十分な余白を作って、ボタンが隠れないようにする */
-    max-height: none !important;        /* 高さを制限しない（中身に合わせて伸びるようにする） */
+    margin-bottom: 50px !important;
+    max-height: none !important;        /* 高さ制限解除 */
     height: auto !important;
 }
 
-/* 3. ポップアップの中身（以前スクロールしていた部分） */
+/* 3. ポップアップの中身 */
 div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
-    overflow: visible !important;       /* 中でのスクロールを禁止（非表示）にする */
-    max-height: none !important;        /* 高さ制限解除 */
+    overflow: visible !important;       /* 中でのスクロール禁止 */
+    max-height: none !important;
 }
 
 /* --- アプリ全体の余白調整 --- */
@@ -223,6 +222,7 @@ check_and_show_reminders()
 
 df_res = load_reservations()
 
+# リストの選択状態をクリアするためのカウンター
 if 'list_reset_counter' not in st.session_state:
     st.session_state['list_reset_counter'] = 0
 
@@ -269,19 +269,10 @@ for idx, r in df_res.iterrows():
 # ---------------------------------------------------------
 # 5. 画面表示（タブ切り替え）
 # ---------------------------------------------------------
-
-# タブ状態の保持
-if 'active_tab' not in st.session_state:
-    st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
-
 tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
-    # タブが選択されたときの状態更新（ポップアップは保持）
-    if st.session_state.get('active_tab') != 0:
-        st.session_state['active_tab'] = 0
-        st.session_state['list_reset_counter'] += 1
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
@@ -301,19 +292,13 @@ with tab_calendar:
             "contentHeight": "auto",
             "aspectRatio": 1.2,
             "titleFormat": {"year": "numeric", "month": "2-digit"},
-
-            # ★追加: スマホでの誤操作防止（0.4秒以上触れないと反応しないようにする）
-            "longPressDelay": 400
+            "longPressDelay": 400 # スマホ誤操作対策
         },
         key=f"calendar_{cal_key}"
     )
 
 # === タブ2: 予約リスト表示 ===
 with tab_list:
-    # タブが選択されたときの状態更新（ポップアップは保持）
-    if st.session_state.get('active_tab') != 1:
-        st.session_state['active_tab'] = 1
-    
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
     
@@ -384,25 +369,23 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            # 新しい選択または初回選択時にポップアップを表示
-            if (st.session_state.get('active_event_idx') != actual_idx or 
-                st.session_state.get('active_event_idx') is None):
+            if st.session_state.get('active_event_idx') != actual_idx:
                 st.session_state['active_event_idx'] = actual_idx
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
+                
+                # ★フラグをTRUEにする
                 st.session_state['is_popup_open'] = True
-                st.session_state['popup_mode'] = "edit"
-                st.session_state['active_tab'] = 1  # リストタブを維持
                 st.rerun()
     else:
         st.info("表示できる予約データがありません。")
 
 
 # ==========================================
-# 6. イベントハンドリング（フラグ制御版）
+# 6. イベントハンドリング（ナビゲーション優先・亡霊退治版）
 # ==========================================
 
-# ポップアップ状態の初期化
+# 状態変数の初期化
 if 'is_popup_open' not in st.session_state:
     st.session_state['is_popup_open'] = False
 
@@ -415,43 +398,43 @@ if 'popup_mode' not in st.session_state:
 if 'prev_cal_state' not in st.session_state:
     st.session_state['prev_cal_state'] = None
 
-if 'active_event_idx' not in st.session_state:
-    st.session_state['active_event_idx'] = None
+if 'last_view_start' not in st.session_state:
+    st.session_state['last_view_start'] = None
 
 if cal_state:
+    # 状態が変わった時だけ処理
     if cal_state != st.session_state['prev_cal_state']:
         st.session_state['prev_cal_state'] = cal_state
         
-        # 1. ナビゲーション（月移動）チェック
         current_view = cal_state.get("view", {})
         current_start = current_view.get("currentStart")
         
-        # 前回の開始日と比較するための変数を初期化
-        if 'last_view_start' not in st.session_state:
-            st.session_state['last_view_start'] = current_start
-        
+        # 1. ナビゲーション（月移動）チェック
+        # 月が変わった場合は、何が何でもポップアップを閉じて終了する
         if current_start != st.session_state['last_view_start']:
-            # 月が変わったら強制リセット
             st.session_state['last_view_start'] = current_start
+            
             st.session_state['is_popup_open'] = False
             st.session_state['active_event_idx'] = None
             st.session_state['list_reset_counter'] += 1
+            
+            # 【終了】これ以降の判定はさせない
         
         else:
             # 2. クリックチェック
             callback = cal_state.get("callback")
+            
             current_signature = None
             if callback == "dateClick":
                 current_signature = f"date_{cal_state['dateClick']['date']}"
             elif callback == "eventClick":
                 current_signature = f"event_{cal_state['eventClick']['event']['id']}"
             
-            # 「新しいクリック」かつ「今閉じてる」なら開く
-            # ※ポップアップが開いている間は、背後のカレンダー操作を無視する
+            # 「新しいクリック」かつ「今ポップアップが開いていない」時だけ開く
+            # (閉じる操作をした直後に、同じ日付情報で再オープンするのを防ぐ)
             if current_signature and current_signature != st.session_state['last_click_signature']:
-                st.session_state['last_click_signature'] = current_signature
                 
-                # ポップアップを開く
+                st.session_state['last_click_signature'] = current_signature
                 st.session_state['is_popup_open'] = True
                 
                 if callback == "dateClick":
@@ -477,20 +460,22 @@ if cal_state:
 
 
 # ==========================================
-# 7. ポップアップ画面の定義（閉じるボタン修正版）
+# 7. ポップアップ画面の定義
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
-    # --- ヘッダー ---
-    # modeに応じて内容を変える
+    # --- ヘッダー（右上に閉じるボタン） ---
+    col_header_title, col_header_close = st.columns([5, 1])
+    with col_header_close:
+        if st.button("閉じる", key="btn_close_top"):
+            st.session_state['is_popup_open'] = False
+            st.rerun()
+
+    # --- A. 新規登録モード ---
     if mode == "new":
         display_date = to_jst_date(date_str)
-        st.write(f"📅 **新規登録:** {display_date}")
-    elif mode == "edit":
-        st.write("📝 **予約の編集・参加**")
-
-    # --- フォーム本体 ---
-    if mode == "new":
+        st.write(f"📅 **日付:** {display_date}")
+        
         past_facilities = []
         if 'facility' in df_res.columns:
             past_facilities = df_res['facility'].dropna().unique().tolist()
@@ -505,6 +490,10 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
+
+        # 余白削除
+        st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
+        st.divider()
 
         col_reg, col_close = st.columns([1, 1])
         with col_reg:
@@ -538,6 +527,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 st.session_state['is_popup_open'] = False
                 st.rerun()
 
+    # --- B. 編集モード ---
     elif mode == "edit" and idx is not None:
         if idx not in df_res.index:
             st.error("このイベントは削除されています")
@@ -547,6 +537,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             return
 
         r = df_res.loc[idx]
+        
         def clean_join(lst):
             if not isinstance(lst, list): return 'なし'
             valid_names = [str(x) for x in lst if x and str(x).strip() != '']
@@ -558,6 +549,9 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
         st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
+        
+        st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
+        st.divider()
 
         st.subheader("参加表明")
         past_nicks = []
@@ -634,7 +628,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
 
 # ==========================================
-# 8. ポップアップ表示制御
+# 8. ポップアップ表示制御（フラグがTRUEの時だけ表示）
 # ==========================================
 if st.session_state['is_popup_open']:
     if st.session_state['popup_mode'] == "new":
