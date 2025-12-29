@@ -569,7 +569,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             return ', '.join(valid_names) if valid_names else 'なし'
 
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
-        st.markdown(f"**施設:** {r['facility']} （{r['status']}）")
+        st.markdown(f"**施設:** {r['facility']} ")
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
