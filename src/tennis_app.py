@@ -187,20 +187,29 @@ def check_and_show_reminders():
 st.markdown("""
 <style>
 /* --- ポップアップの表示位置とスクロール統一 --- */
+            
 div[data-testid="stDialog"] {
     align-items: flex-start !important; /* 上詰め */
     padding-top: 0 !important;        /* 上部余白 */
 }
+            
 div[data-testid="stDialog"] > div:first-child {
-    margin-top: 10px !important;
+    margin-top: 5vh !important;
     margin-bottom: 50px !important;
     max-height: none !important;        /* 高さ制限解除 */
     height: auto !important;
 }
+            
 div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
     overflow: visible !important;       /* 中でのスクロール禁止 */
     max-height: none !important;
+            
+    /* スマホ特有の挙動対策 */
+    transform: none !important;         /* 座標ズレ防止 */
+    -webkit-overflow-scrolling: touch !important; /* 滑らかスクロール */
+    scroll-behavior: auto !important;   /* スクロール位置の記憶を無効化 */
 }
+            
 /* --- アプリ全体の余白調整 --- */
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
