@@ -384,14 +384,16 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            # リストでの選択時は必ずポップアップを表示
-            st.session_state['active_event_idx'] = actual_idx
-            target_date = df_res.loc[actual_idx]["date"]
-            st.session_state['clicked_date'] = str(target_date)
-            st.session_state['is_popup_open'] = True
-            st.session_state['popup_mode'] = "edit"
-            st.session_state['active_tab'] = 1  # リストタブを維持
-            st.rerun()
+            # 新しい選択または初回選択時にポップアップを表示
+            if (st.session_state.get('active_event_idx') != actual_idx or 
+                st.session_state.get('active_event_idx') is None):
+                st.session_state['active_event_idx'] = actual_idx
+                target_date = df_res.loc[actual_idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+                st.session_state['is_popup_open'] = True
+                st.session_state['popup_mode'] = "edit"
+                st.session_state['active_tab'] = 1  # リストタブを維持
+                st.rerun()
     else:
         st.info("表示できる予約データがありません。")
 
