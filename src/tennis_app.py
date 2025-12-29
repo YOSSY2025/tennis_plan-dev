@@ -521,8 +521,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_close:
             if st.button("閉じる", use_container_width=True):
                 st.session_state['is_popup_open'] = False
-                st.session_state['active_event_idx'] = None
-                st.session_state['list_reset_counter'] += 1
+                st.session_state['last_click_signature'] = None
                 st.rerun()
 
     # --- B. 編集モード ---
@@ -600,6 +599,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 st.session_state['is_popup_open'] = False
                 st.session_state['active_event_idx'] = None
                 st.session_state['list_reset_counter'] += 1
+                st.session_state['last_click_signature'] = None
                 st.rerun()
 
         with st.expander("管理者メニュー（編集・削除）"):
