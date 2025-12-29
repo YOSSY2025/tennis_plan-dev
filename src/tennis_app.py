@@ -274,10 +274,18 @@ for idx, r in df_res.iterrows():
 if 'active_tab' not in st.session_state:
     st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
 
+# タブ状態の保持
+if 'active_tab' not in st.session_state:
+    st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
+
 tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
+    # タブが選択されたときの状態更新（ポップアップは保持）
+    if st.session_state.get('active_tab') != 0:
+        st.session_state['active_tab'] = 0
+        st.session_state['list_reset_counter'] += 1
     # タブが選択されたときの状態更新
     if st.session_state.get('active_tab') != 0:
         st.session_state['active_tab'] = 0
