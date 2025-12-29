@@ -389,7 +389,6 @@ with tab_list:
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
                 
-                # ★フラグをTRUEにする
                 st.session_state['is_popup_open'] = True
                 st.session_state['popup_mode'] = "edit"
                 st.rerun()
