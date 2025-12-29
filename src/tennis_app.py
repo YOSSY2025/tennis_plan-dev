@@ -521,7 +521,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_close:
             if st.button("閉じる", use_container_width=True):
                 st.session_state['is_popup_open'] = False
-                st.session_state['last_click_signature'] = None
+                # ▼この3つがあれば完璧です
+                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
+                st.session_state['active_event_idx'] = None      # リストの再クリック用
+                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
+
+
                 st.rerun()
 
     # --- B. 編集モード ---
@@ -530,8 +535,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.error("このイベントは削除されています")
             if st.button("閉じる"):
                 st.session_state['is_popup_open'] = False
-                st.session_state['active_event_idx'] = None
-                st.session_state['list_reset_counter'] += 1
+                # ▼この3つがあれば完璧です
+                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
+                st.session_state['active_event_idx'] = None      # リストの再クリック用
+                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
+
                 st.rerun()
             return
 
@@ -597,9 +605,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_close_main:
             if st.button("閉じる", use_container_width=True):
                 st.session_state['is_popup_open'] = False
-                st.session_state['active_event_idx'] = None
-                st.session_state['list_reset_counter'] += 1
-                st.session_state['last_click_signature'] = None
+                # ▼この3つがあれば完璧です
+                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
+                st.session_state['active_event_idx'] = None      # リストの再クリック用
+                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
+
                 st.rerun()
 
         with st.expander("管理者メニュー（編集・削除）"):
