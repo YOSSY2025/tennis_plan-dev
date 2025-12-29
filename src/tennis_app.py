@@ -363,7 +363,7 @@ with tab_list:
         if '日時' in df_display.columns:
             df_display = df_display.sort_values('日時', ascending=True)
 
-        table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
+        table_key = "reservation_list_table_fixed"
 
         event_selection = st.dataframe(
             df_display,
