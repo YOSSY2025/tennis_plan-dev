@@ -367,6 +367,7 @@ with tab_list:
             df_display,
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
             selection_mode="single-row",
             key=table_key,
             column_config={
