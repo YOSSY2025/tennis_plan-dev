@@ -274,19 +274,14 @@ for idx, r in df_res.iterrows():
 if 'active_tab' not in st.session_state:
     st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
 
-# タブ切り替えの検知と制御
-if 'tab_switch_lock' not in st.session_state:
-    st.session_state['tab_switch_lock'] = False
-
 tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
-    # リストタブからの自動切り替えを防止
-    if not st.session_state.get('tab_switch_lock', False):
-        if st.session_state.get('active_tab') != 0:
-            st.session_state['active_tab'] = 0
-            st.session_state['list_reset_counter'] += 1
+    # タブが選択されたときの状態更新（ポップアップは保持）
+    if st.session_state.get('active_tab') != 0:
+        st.session_state['active_tab'] = 0
+        st.session_state['list_reset_counter'] += 1
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
@@ -315,9 +310,6 @@ with tab_calendar:
 
 # === タブ2: 予約リスト表示 ===
 with tab_list:
-    # リストタブでの操作時はタブ切り替えをロック
-    st.session_state['tab_switch_lock'] = True
-    
     # タブが選択されたときの状態更新（ポップアップは保持）
     if st.session_state.get('active_tab') != 1:
         st.session_state['active_tab'] = 1
@@ -392,27 +384,25 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            if st.session_state.get('active_event_idx') != actual_idx:
+            # 新しい選択または初回選択時にポップアップを表示
+            if (st.session_state.get('active_event_idx') != actual_idx or 
+                st.session_state.get('active_event_idx') is None):
                 st.session_state['active_event_idx'] = actual_idx
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
-                
-                # ★フラグをTRUEにする
                 st.session_state['is_popup_open'] = True
                 st.session_state['popup_mode'] = "edit"
+                st.session_state['active_tab'] = 1  # リストタブを維持
                 st.rerun()
     else:
         st.info("表示できる予約データがありません。")
-
-# リストタブの処理終了時にロックを解除
-if st.session_state.get('active_tab') == 1:
-    st.session_state['tab_switch_lock'] = False
 
 
 # ==========================================
 # 6. イベントハンドリング（フラグ制御版）
 # ==========================================
 
+# ポップアップ状態の初期化
 if 'is_popup_open' not in st.session_state:
     st.session_state['is_popup_open'] = False
 
@@ -424,6 +414,9 @@ if 'popup_mode' not in st.session_state:
 
 if 'prev_cal_state' not in st.session_state:
     st.session_state['prev_cal_state'] = None
+
+if 'active_event_idx' not in st.session_state:
+    st.session_state['active_event_idx'] = None
 
 if cal_state:
     if cal_state != st.session_state['prev_cal_state']:
