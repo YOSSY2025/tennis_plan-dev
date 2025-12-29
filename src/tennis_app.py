@@ -517,9 +517,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
                     save_reservations(updated_df)
                     st.success("登録しました")
-                    st.session_state['is_popup_open'] = False
-                    st.session_state['active_event_idx'] = None
-                    st.session_state['list_reset_counter'] += 1
                     st.rerun()
         with col_close:
             if st.button("閉じる", use_container_width=True):
@@ -617,9 +614,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df.at[idx, "status"] = new_status
                     save_reservations(current_df)
                     st.success("更新しました")
-                    st.session_state['is_popup_open'] = False
-                    st.session_state['active_event_idx'] = None
-                    st.session_state['list_reset_counter'] += 1
                     st.rerun()
 
             with delete_tab:
@@ -629,9 +623,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = current_df.drop(idx).reset_index(drop=True)
                     save_reservations(current_df)
                     st.success("削除しました")
-                    st.session_state['is_popup_open'] = False
-                    st.session_state['active_event_idx'] = None
-                    st.session_state['list_reset_counter'] += 1
                     st.rerun()
 
 
