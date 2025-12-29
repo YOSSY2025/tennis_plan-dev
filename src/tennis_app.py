@@ -469,8 +469,6 @@ if cal_state:
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
-    # --- ヘッダー ---
-    col_header_title, col_header_close = st.columns([5, 1])
     # --- A. 新規登録モード ---
     if mode == "new":
         display_date = to_jst_date(date_str)
@@ -599,9 +597,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         
                         save_reservations(current_df)
                         st.success("反映しました")
-                        st.session_state['is_popup_open'] = False
-                        st.session_state['active_event_idx'] = None
-                        st.session_state['list_reset_counter'] += 1
                         st.rerun()
         with col_close_main:
             if st.button("閉じる", use_container_width=True):
