@@ -186,36 +186,40 @@ def check_and_show_reminders():
 # ==========================================
 st.markdown("""
 <style>
-/* --- ポップアップの表示位置とスクロール統一 --- */
-            
+/* --- ポップアップのスマホ表示最適化 --- */
+
+/* 1. ポップアップの大枠（オーバーレイ） */
 div[data-testid="stDialog"] {
-    align-items: flex-start !important; /* 上詰め */
-    padding-top: 0 !important;        /* 上部余白 */
+    align-items: flex-start !important; /* 垂直方向：上詰め */
+    padding-top: 0 !important;          /* 余計なパディングを削除 */
 }
-            
-div[data-testid="stDialog"] > div:first-child {
-    margin-top: 5vh !important;
-    margin-bottom: 50px !important;
-    max-height: none !important;        /* 高さ制限解除 */
-    height: auto !important;
-}
-            
-div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
-    overflow: visible !important;       /* 中でのスクロール禁止 */
-    max-height: none !important;
-            
+
+/* 2. ポップアップの本体（白い箱） */
+div[data-testid="stDialog"] > div[role="dialog"] {
+    margin-top: 5vh !important;         /* 画面上部から5%の位置に配置 */
+    margin-bottom: 50px !important;     /* 下に余裕を持たせる */
+    max-height: 90dvh !important;       /* 画面からはみ出さないように制限 */
+    overflow-y: auto !important;        /* 箱の中でスクロールさせる */
+    
     /* スマホ特有の挙動対策 */
     transform: none !important;         /* 座標ズレ防止 */
     -webkit-overflow-scrolling: touch !important; /* 滑らかスクロール */
     scroll-behavior: auto !important;   /* スクロール位置の記憶を無効化 */
 }
-            
+
+/* 3. 内部コンテンツのスクロール干渉を排除 */
+div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
 /* --- アプリ全体の余白調整 --- */
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
 </style>
 """, unsafe_allow_html=True)
+
 
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
 
