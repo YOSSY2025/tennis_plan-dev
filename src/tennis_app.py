@@ -261,12 +261,18 @@ for idx, r in df_res.iterrows():
 
 
 # ---------------------------------------------------------
-# 5. 画面表示（タブ切り替え）
+# 5. 画面表示（タブ切り替え⇒ラジオボタン切り替えに変更）
 # ---------------------------------------------------------
-tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
+view_mode = st.radio(
+    "表示モード", 
+    ["📅 カレンダー", "📋 予約リスト"], 
+    horizontal=True,
+    label_visibility="collapsed",
+    key="view_mode_selector"
+)
 
-# === タブ1: カレンダー表示 ===
-with tab_calendar:
+# === モード1: カレンダー表示 ===
+if view_mode == "📅 カレンダー":
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
@@ -291,8 +297,11 @@ with tab_calendar:
         key=f"calendar_{cal_key}"
     )
 
-# === タブ2: 予約リスト表示 ===
-with tab_list:
+# === モード2: 予約リスト表示 ===
+elif view_mode == "📋 予約リスト":
+    # ★重要: カレンダー変数を空にしておく（下のイベントハンドリングを無効化するため）
+    cal_state = None 
+    
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
     
@@ -363,15 +372,13 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            # 選択が変わった時
+            # リストで選択が変わった時
             if st.session_state.get('active_event_idx') != actual_idx:
                 st.session_state['active_event_idx'] = actual_idx
                 target_date = df_res.loc[actual_idx]["date"]
                 st.session_state['clicked_date'] = str(target_date)
                 
-                # ★追加: 「これはリスト操作だよ！カレンダー側で勝手に閉じないでね！」という免罪符
-                st.session_state['skip_calendar_event'] = True
-                
+                # ポップアップON
                 st.session_state['is_popup_open'] = True
                 st.session_state['popup_mode'] = "edit"
                 st.rerun()
