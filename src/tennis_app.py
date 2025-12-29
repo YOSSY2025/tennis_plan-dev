@@ -269,10 +269,21 @@ for idx, r in df_res.iterrows():
 # ---------------------------------------------------------
 # 5. 画面表示（タブ切り替え）
 # ---------------------------------------------------------
+
+# タブ状態の保持
+if 'active_tab' not in st.session_state:
+    st.session_state['active_tab'] = 0  # 0: カレンダー, 1: リスト
+
 tab_calendar, tab_list = st.tabs(["📅 カレンダー", "📋 予約リスト"])
 
 # === タブ1: カレンダー表示 ===
 with tab_calendar:
+    # タブが選択されたときの状態更新
+    if st.session_state.get('active_tab') != 0:
+        st.session_state['active_tab'] = 0
+        st.session_state['list_reset_counter'] += 1
+        st.session_state['is_popup_open'] = False
+    
     initial_date = datetime.now().strftime("%Y-%m-%d")
     if "clicked_date" in st.session_state and st.session_state["clicked_date"]:
         initial_date = st.session_state["clicked_date"]
@@ -301,6 +312,11 @@ with tab_calendar:
 
 # === タブ2: 予約リスト表示 ===
 with tab_list:
+    # タブが選択されたときの状態更新
+    if st.session_state.get('active_tab') != 1:
+        st.session_state['active_tab'] = 1
+        st.session_state['is_popup_open'] = False
+    
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
     
@@ -378,6 +394,8 @@ with tab_list:
                 
                 # ★フラグをTRUEにする
                 st.session_state['is_popup_open'] = True
+                # リストタブでの編集であることを明示
+                st.session_state['active_tab'] = 1
                 st.rerun()
     else:
         st.info("表示できる予約データがありません。")
@@ -441,6 +459,8 @@ if cal_state:
                     st.session_state['active_event_idx'] = None
                     st.session_state['popup_mode'] = "new"
                     st.session_state['list_reset_counter'] += 1
+                    # カレンダータブでの新規登録であることを明示
+                    st.session_state['active_tab'] = 0
                 
                 elif callback == "eventClick":
                     ev = cal_state["eventClick"]["event"]
@@ -453,6 +473,8 @@ if cal_state:
                     
                     st.session_state['popup_mode'] = "edit"
                     st.session_state['list_reset_counter'] += 1
+                    # カレンダータブでの編集であることを明示
+                    st.session_state['active_tab'] = 0
                 
                 st.rerun()
 
@@ -513,6 +535,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     save_reservations(updated_df)
                     st.success("登録しました")
                     st.session_state['is_popup_open'] = False
+                    # タブ状態を保持してリロード
                     st.rerun()
         with col_close:
             if st.button("閉じる", use_container_width=True):
@@ -582,6 +605,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         save_reservations(current_df)
                         st.success("反映しました")
                         st.session_state['is_popup_open'] = False
+                        # タブ状態を保持してリロード
                         st.rerun()
         with col_close_main:
             if st.button("閉じる", use_container_width=True):
@@ -601,6 +625,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     save_reservations(current_df)
                     st.success("更新しました")
                     st.session_state['is_popup_open'] = False
+                    # タブ状態を保持してリロード
                     st.rerun()
 
             with delete_tab:
@@ -611,6 +636,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     save_reservations(current_df)
                     st.success("削除しました")
                     st.session_state['is_popup_open'] = False
+                    # タブ状態を保持してリロード
                     st.rerun()
 
 
