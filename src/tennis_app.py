@@ -185,32 +185,32 @@ def check_and_show_reminders():
 # 4. 画面描画
 # ==========================================
 st.markdown("""
+<script>
+    // ポップアップが開いたら強制的に一番上にスクロールさせる
+    // (MutationObserverでDOMの変化を監視)
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            const dialog = parent.document.querySelector('div[data-testid="stDialog"]');
+            if (dialog) {
+                dialog.scrollTop = 0; // スクロール位置をリセット
+            }
+        });
+    });
+    observer.observe(parent.document.body, { childList: true, subtree: true });
+</script>
+
 <style>
-/* --- ポップアップのスマホ表示最適化 --- */
-
-/* 1. ポップアップの大枠（オーバーレイ） */
+/* --- ポップアップの表示位置 --- */
 div[data-testid="stDialog"] {
-    align-items: flex-start !important; /* 垂直方向：上詰め */
-    padding-top: 0 !important;          /* 余計なパディングを削除 */
+    align-items: flex-start !important; /* 強制的に上詰め */
+    padding-top: 10px !important;       /* 上に少し余白 */
+    overflow-y: auto !important;        /* 全体スクロール */
 }
 
-/* 2. ポップアップの本体（白い箱） */
+/* ポップアップ本体の余白調整 */
 div[data-testid="stDialog"] > div[role="dialog"] {
-    margin-top: 5vh !important;         /* 画面上部から5%の位置に配置 */
-    margin-bottom: 50px !important;     /* 下に余裕を持たせる */
-    max-height: 90dvh !important;       /* 画面からはみ出さないように制限 */
-    overflow-y: auto !important;        /* 箱の中でスクロールさせる */
-    
-    /* スマホ特有の挙動対策 */
-    transform: none !important;         /* 座標ズレ防止 */
-    -webkit-overflow-scrolling: touch !important; /* 滑らかスクロール */
-    scroll-behavior: auto !important;   /* スクロール位置の記憶を無効化 */
-}
-
-/* 3. 内部コンテンツのスクロール干渉を排除 */
-div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
-    overflow: visible !important;
-    max-height: none !important;
+    margin-top: 0 !important;
+    margin-bottom: 50px !important;
 }
 
 /* --- アプリ全体の余白調整 --- */
