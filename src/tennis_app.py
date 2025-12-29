@@ -391,7 +391,7 @@ with tab_list:
                 
                 st.session_state['is_popup_open'] = True
                 st.session_state['popup_mode'] = "edit"
-                st.rerun()
+                # 選択状態を保持するためにst.rerun()を削除
     else:
         st.info("表示できる予約データがありません。")
 
