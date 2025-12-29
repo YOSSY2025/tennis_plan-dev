@@ -367,6 +367,7 @@ with tab_list:
             df_display,
             use_container_width=True,
             hide_index=True,
+            on_select="rerun",
             selection_mode="single-row",
             key=table_key,
             column_config={
@@ -383,14 +384,12 @@ with tab_list:
             selected_row_idx = event_selection.selection.rows[0]
             actual_idx = df_display.index[selected_row_idx]
             
-            if st.session_state.get('active_event_idx') != actual_idx:
-                st.session_state['active_event_idx'] = actual_idx
-                target_date = df_res.loc[actual_idx]["date"]
-                st.session_state['clicked_date'] = str(target_date)
-                
-                st.session_state['is_popup_open'] = True
-                st.session_state['popup_mode'] = "edit"
-                # 選択状態を保持するためにst.rerun()を削除
+            # 選択されたアイテムのポップアップを表示
+            st.session_state['active_event_idx'] = actual_idx
+            target_date = df_res.loc[actual_idx]["date"]
+            st.session_state['clicked_date'] = str(target_date)
+            st.session_state['is_popup_open'] = True
+            st.session_state['popup_mode'] = "edit"
     else:
         st.info("表示できる予約データがありません。")
 
