@@ -189,9 +189,7 @@ st.markdown("""
 /* --- ポップアップの表示位置とスクロール統一 --- */
 div[data-testid="stDialog"] {
     align-items: flex-start !important; /* 上詰め */
-    overflow-y: auto !important;        /* ここでスクロールさせる */
-    -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior: contain !important;
+    padding-top: 0 !important;        /* 上部余白 */
 }
 div[data-testid="stDialog"] > div:first-child {
     margin-top: 10px !important;
