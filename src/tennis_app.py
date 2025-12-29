@@ -186,31 +186,15 @@ def check_and_show_reminders():
 # ==========================================
 st.markdown("""
 <style>
-/* --- ポップアップの表示位置とスクロール統一 --- */
-
-/* 1. ポップアップの大枠（グレーの背景部分） */
-div[data-testid="stDialog"] {
-    align-items: flex-start !important; /* 上詰めにする */
-    overflow-y: auto !important;        /* ここでスクロールさせる（一本化） */
-    -webkit-overflow-scrolling: touch !important;
-    overscroll-behavior: contain !important; /* 背景のカレンダーを動かさない */
-}
-
-/* 2. ポップアップの白い箱（コンテンツ本体） */
-div[data-testid="stDialog"] > div:first-child {
-    margin-top: 10px !important;
-    margin-bottom: 50px !important;     /* 下に十分な余白を作って、ボタンが隠れないようにする */
-    max-height: none !important;        /* 高さを制限しない（中身に合わせて伸びるようにする） */
-    height: auto !important;
-}
-
-/* 3. ポップアップの中身（以前スクロールしていた部分） */
+/* スマホでのポップアップスクロール対策 */
 div[data-testid="stDialog"] div[data-testid="stVerticalBlock"] {
-    overflow: visible !important;       /* 中でのスクロールを禁止（非表示）にする */
-    max-height: none !important;        /* 高さ制限解除 */
+    align-items: flex-start !important;
+    overflow-y: auto !important;
+    max-height: 85vh !important;
+    -webkit-overflow-scrolling: touch !important; /* スマホでのスクロールを滑らかにする */            
+    pedding-top:20px !important;
+   pedding-bottom:20px !important;
 }
-
-/* --- アプリ全体の余白調整 --- */
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
