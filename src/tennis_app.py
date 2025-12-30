@@ -343,7 +343,7 @@ elif view_mode == "📋 予約リスト":
             if participants:
                 parts.append(", ".join(participants))
             if consider:
-                parts.append(f"(保留：{", ".join(consider)})")
+                parts.append(f"(保留 {", ".join(consider)})")
             
             return " ".join(parts) if parts else ""
         
@@ -360,18 +360,13 @@ elif view_mode == "📋 予約リスト":
 
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
+        df_list['施設名'] = df_list['facility']
+        df_list['状態'] = df_list['status']
+        df_list['メモ'] = df_list['message']
         
-        display_cols = ['日時', 'facility', 'status', '参加者', 'message']
-        col_map = {'facility': '施設', 'status': '状態', 'message': 'メモ'}
-        
-        final_cols = []
-        rename_dict = {}
-        for c in display_cols:
-            if c in df_list.columns: final_cols.append(c)
-            elif c in col_map and col_map[c] in df_list.columns: pass 
-            elif c in col_map: final_cols.append(c); rename_dict[c] = col_map[c]
+        display_cols = ['日時', '施設名', '状態', '参加者', 'メモ']
 
-        df_display = df_list[final_cols].rename(columns=rename_dict)
+        df_display = df_list[display_cols]
         if '日時' in df_display.columns:
             df_display = df_display.sort_values('日時', ascending=True)
 
