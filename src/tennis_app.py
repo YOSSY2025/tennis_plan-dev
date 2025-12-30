@@ -274,6 +274,10 @@ for idx, r in df_res.iterrows():
 # ---------------------------------------------------------
 # 5. 画面表示（タブ切り替え⇒ラジオボタン切り替えに変更）
 # ---------------------------------------------------------
+# 表示モードが変わったらポップアップを閉じる
+if 'prev_view_mode' not in st.session_state:
+    st.session_state['prev_view_mode'] = None
+
 view_mode = st.radio(
     "表示モード", 
     ["📅 カレンダー", "📋 予約リスト"], 
@@ -281,6 +285,14 @@ view_mode = st.radio(
     label_visibility="collapsed",
     key="view_mode_selector"
 )
+
+# モードが切り替わったらポップアップを閉じる
+if st.session_state['prev_view_mode'] is not None and st.session_state['prev_view_mode'] != view_mode:
+    st.session_state['is_popup_open'] = False
+    st.session_state['last_click_signature'] = None
+    st.session_state['active_event_idx'] = None
+    st.session_state['list_reset_counter'] += 1
+st.session_state['prev_view_mode'] = view_mode
 
 # === モード1: カレンダー表示 ===
 if view_mode == "📅 カレンダー":
