@@ -213,6 +213,11 @@ div[data-testid="stDialog"] > div[role="dialog"] {
     margin-bottom: 50px !important;
 }
 
+/* ポップアップの×ボタンを非表示 */
+div[data-testid="stDialog"] button[aria-label="Close"] {
+    display: none !important;
+}
+
 /* --- アプリ全体の余白調整 --- */
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
