@@ -185,19 +185,6 @@ def check_and_show_reminders():
 # 4. 画面描画
 # ==========================================
 st.markdown("""
-<script>
-    // ポップアップが開いたら強制的に一番上にスクロールさせる
-    // (MutationObserverでDOMの変化を監視)
-    const observer = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-            const dialog = parent.document.querySelector('div[data-testid="stDialog"]');
-            if (dialog) {
-                dialog.scrollTop = 0; // スクロール位置をリセット
-            }
-        });
-    });
-    observer.observe(parent.document.body, { childList: true, subtree: true });
-</script>
 
 <style>
 /* --- ポップアップの表示位置 --- */
@@ -209,7 +196,7 @@ div[data-testid="stDialog"] {
 
 /* ポップアップ本体の余白調整 */
 div[data-testid="stDialog"] > div[role="dialog"] {
-    margin-top: 0 !important;
+    margin-top: 20px !important;
     margin-bottom: 50px !important;
 }
 
@@ -487,6 +474,20 @@ if cal_state:
 # ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
+    # 強制スクロール用のアンカーとスクリプト
+    st.markdown('<div id="dialog_top_anchor"></div>', unsafe_allow_html=True)
+    st.markdown("""
+        <script>
+            try {
+                var element = document.getElementById("dialog_top_anchor");
+                if(element) {
+                    // 親要素(ダイアログ)の中で、この要素が見える位置までスクロールする
+                    element.scrollIntoView({behavior: "instant", block: "start"});
+                }
+            } catch(e) {}
+        </script>
+    """, unsafe_allow_html=True)
+
     # --- A. 新規登録モード ---
     if mode == "new":
         display_date = to_jst_date(date_str)
