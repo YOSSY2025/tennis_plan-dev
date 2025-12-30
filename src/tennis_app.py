@@ -469,24 +469,25 @@ if cal_state:
                     st.rerun()
 
 
+# ==========================================
+# 7. ポップアップ画面の定義（閉じるボタン完全版）
+# ==========================================
 @st.dialog("予約内容の登録・編集")
 def entry_form_dialog(mode, idx=None, date_str=None):
-    # ★修正: 強制スクロール用のアンカーとスクリプト（遅延実行版）
+    # 強制スクロール用のアンカーとスクリプト
     st.markdown('<div id="dialog_top_anchor"></div>', unsafe_allow_html=True)
     st.markdown("""
         <script>
-            // 画面描画や自動フォーカスが終わるのを少し待ってから、強制的に上へ戻す
-            setTimeout(function() {
-                try {
-                    var element = document.getElementById("dialog_top_anchor");
-                    if(element) {
-                        element.scrollIntoView({behavior: "instant", block: "start"});
-                    }
-                } catch(e) {}
-            }, 300); // 0.3秒後に実行
+            try {
+                var element = document.getElementById("dialog_top_anchor");
+                if(element) {
+                    // 親要素(ダイアログ)の中で、この要素が見える位置までスクロールする
+                    element.scrollIntoView({behavior: "instant", block: "start"});
+                }
+            } catch(e) {}
         </script>
     """, unsafe_allow_html=True)
-    
+
     # --- A. 新規登録モード ---
     if mode == "new":
         display_date = to_jst_date(date_str)
