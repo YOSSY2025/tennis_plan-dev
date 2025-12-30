@@ -336,6 +336,9 @@ elif view_mode == "📋 予約リスト":
         
         df_list['参加者'] = df_list['participants'].apply(format_list_col)
         df_list['保留'] = df_list['consider'].apply(format_list_col)
+        
+        # メモ欄の<br>をスペースに変換
+        df_list['message'] = df_list['message'].apply(lambda x: str(x).replace('<br>', ' ') if pd.notna(x) else '')
 
         def format_date_with_weekday(d):
             if not isinstance(d, (date, datetime)): return str(d)
@@ -568,12 +571,19 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             valid_names = [str(x) for x in lst if x and str(x).strip() != '']
             return ', '.join(valid_names) if valid_names else 'なし'
 
+        # メモの<br>を改行に変換して表示
+        display_msg = r.get('message', '')
+        if pd.notna(display_msg) and display_msg:
+            display_msg = display_msg.replace('<br>', '\n')
+        else:
+            display_msg = '（なし）'
+        
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
         st.markdown(f"**施設:** {r['facility']} ")
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
-        st.markdown(f"**メモ:** {r['message'] if pd.notna(r.get('message')) and r['message'] else '（なし）'}")
+        st.markdown(f"**メモ:**\n{display_msg}")
         
         st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
         st.divider()
