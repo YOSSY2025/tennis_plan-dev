@@ -334,8 +334,20 @@ elif view_mode == "📋 予約リスト":
             if isinstance(lst, list): return ", ".join(lst)
             return str(lst)
         
-        df_list['参加者'] = df_list['participants'].apply(format_list_col)
-        df_list['保留'] = df_list['consider'].apply(format_list_col)
+        # 参加者と保留を統合して表示
+        def format_participants_with_consider(row):
+            parts = []
+            participants = row['participants'] if isinstance(row['participants'], list) else []
+            consider = row['consider'] if isinstance(row['consider'], list) else []
+            
+            if participants:
+                parts.append(", ".join(participants))
+            if consider:
+                parts.append(f"(保留：{", ".join(consider)})")
+            
+            return " ".join(parts) if parts else ""
+        
+        df_list['参加者'] = df_list.apply(format_participants_with_consider, axis=1)
         
         # メモ欄の<br>をスペースに変換
         df_list['message'] = df_list['message'].apply(lambda x: str(x).replace('<br>', ' ') if pd.notna(x) else '')
@@ -349,7 +361,7 @@ elif view_mode == "📋 予約リスト":
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         
-        display_cols = ['日時', 'facility', 'status', '参加者', '保留', 'message']
+        display_cols = ['日時', 'facility', 'status', '参加者', 'message']
         col_map = {'facility': '施設', 'status': '状態', 'message': 'メモ'}
         
         final_cols = []
@@ -377,7 +389,6 @@ elif view_mode == "📋 予約リスト":
                 "施設": st.column_config.TextColumn("施設", width="medium"),
                 "状態": st.column_config.TextColumn("状態", width="small"),
                 "参加者": st.column_config.TextColumn("参加者", width="large"),
-                "保留": st.column_config.TextColumn("保留", width="medium"),
                 "メモ": st.column_config.TextColumn("メモ", width="large"),
             }
         )
