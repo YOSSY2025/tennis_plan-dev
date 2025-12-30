@@ -361,10 +361,10 @@ elif view_mode == "📋 予約リスト":
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         df_list['施設名'] = df_list['facility']
-        df_list['状態'] = df_list['status']
+        df_list['ステータス'] = df_list['status']
         df_list['メモ'] = df_list['message']
         
-        display_cols = ['日時', '施設名', '状態', '参加者', 'メモ']
+        display_cols = ['日時', '施設名', 'ステータス', '参加者', 'メモ']
 
         df_display = df_list[display_cols]
         if '日時' in df_display.columns:
