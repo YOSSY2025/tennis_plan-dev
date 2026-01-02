@@ -233,9 +233,9 @@ if reminder_messages:
         for m in reminder_messages:
             st.info(m)
 
-# 成功メッセージの表示（successを使用して長く表示）
+# 成功メッセージの表示（toastを使用）
 if 'show_success_message' in st.session_state and st.session_state['show_success_message']:
-    st.success(f"✅ {st.session_state['show_success_message']}")
+    st.toast(st.session_state['show_success_message'], icon="✅")
     st.session_state['show_success_message'] = None
 
 df_res = load_reservations()
@@ -588,7 +588,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
     # --- B. 編集モード ---
     elif mode == "edit" and idx is not None:
         if idx not in df_res.index:
-            st.error("このイベントは削除されています")
+            st.error("イベントが削除されました。")
             if st.button("閉じる"):
                 st.session_state['is_popup_open'] = False
                 # ▼この3つがあれば完璧です
