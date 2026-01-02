@@ -236,9 +236,12 @@ if 'show_success_message' in st.session_state and st.session_state['show_success
     if isinstance(msg_data, dict):
         msg_text = msg_data.get('text')
         msg_time = msg_data.get('time')
-        # 5秒間表示
-        if (datetime.now() - msg_time).total_seconds() < 5:
+        # 3秒間表示
+        elapsed = (datetime.now() - msg_time).total_seconds()
+        if elapsed < 3:
             st.success(msg_text)
+            time.sleep(0.1)
+            st.rerun()
         else:
             st.session_state['show_success_message'] = None
     else:
