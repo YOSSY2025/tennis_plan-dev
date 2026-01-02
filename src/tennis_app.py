@@ -8,6 +8,7 @@ from google.oauth2.service_account import Credentials
 import json
 import time
 from gspread.exceptions import APIError
+from urllib.parse import quote
 
 # ==========================================
 # 1. 共通関数・設定
@@ -43,6 +44,43 @@ def to_jst_date(iso_str):
     except Exception:
         if isinstance(iso_str, date): return iso_str
         return datetime.strptime(str(iso_str)[:10], "%Y-%m-%d").date()
+
+def generate_google_calendar_url(reservation_data):
+    """
+    予約データからGoogleカレンダー登録用URLを生成
+    
+    Args:
+        reservation_data: 予約情報の辞書
+        
+    Returns:
+        str: Googleカレンダー登録用URL
+    """
+    # タイトル生成: 🎾テニス_[施設名]
+    title = f"🎾テニス_{reservation_data['facility']}"
+    
+    # 日時生成: YYYYMMDDTHHMMSS形式
+    res_date = reservation_data['date']
+    start_hour = int(safe_int(reservation_data.get('start_hour'), 9))
+    start_minute = int(safe_int(reservation_data.get('start_minute'), 0))
+    end_hour = int(safe_int(reservation_data.get('end_hour'), 11))
+    end_minute = int(safe_int(reservation_data.get('end_minute'), 0))
+    
+    start_dt = datetime.combine(res_date, dt_time(start_hour, start_minute))
+    end_dt = datetime.combine(res_date, dt_time(end_hour, end_minute))
+    
+    start_str = start_dt.strftime("%Y%m%dT%H%M%S")
+    end_str = end_dt.strftime("%Y%m%dT%H%M%S")
+    
+    # URL生成
+    base_url = "https://calendar.google.com/calendar/render"
+    params = [
+        "action=TEMPLATE",
+        f"text={quote(title)}",
+        f"dates={start_str}/{end_str}",
+        "ctz=Asia/Tokyo"
+    ]
+    
+    return f"{base_url}?{'&'.join(params)}"
 
 
 # ===== Google Sheets 認証 =====
@@ -614,6 +652,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             display_msg = '（なし）'
         
         st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
+        
+        # Googleカレンダーに追加リンク
+        calendar_url = generate_google_calendar_url(r)
+        st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
+        
         st.markdown(f"**施設:** {r['facility']} ")
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
