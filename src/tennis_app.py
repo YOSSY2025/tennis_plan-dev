@@ -137,7 +137,7 @@ def load_lottery_data_cached():
 
 def check_and_show_reminders():
     df = load_lottery_data_cached()
-    if df.empty: return
+    if df.empty: return []
 
     jst_now = datetime.utcnow() + timedelta(hours=9)
     today = jst_now.date()
@@ -176,9 +176,7 @@ def check_and_show_reminders():
 
         if is_match: messages_to_show.append(msg)
 
-    if messages_to_show:
-        for m in messages_to_show:
-            st.info(f"{m}", icon=None)
+    return messages_to_show
 
 
 # ==========================================
@@ -228,7 +226,12 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
 
 st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
 
-check_and_show_reminders()
+# お知らせをトグルに表示
+reminder_messages = check_and_show_reminders()
+if reminder_messages:
+    with st.expander("📢 お知らせ", expanded=True):
+        for m in reminder_messages:
+            st.info(m)
 
 # 成功メッセージの表示（toastを使用）
 if 'show_success_message' in st.session_state and st.session_state['show_success_message']:
