@@ -178,7 +178,7 @@ def check_and_show_reminders():
 
     if messages_to_show:
         for m in messages_to_show:
-            st.info(f"🔔 {m}", icon="📢")
+            st.info(f"{m}", icon=None)
 
 
 # ==========================================
