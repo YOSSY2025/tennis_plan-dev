@@ -229,7 +229,7 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 # お知らせをトグルに表示
 reminder_messages = check_and_show_reminders()
 if reminder_messages:
-    with st.expander("📢 お知らせ", expanded=True):
+    with st.expander("📢 お知らせ", expanded=False):
         for m in reminder_messages:
             st.info(m)
 
