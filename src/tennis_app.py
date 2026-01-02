@@ -233,9 +233,9 @@ if reminder_messages:
         for m in reminder_messages:
             st.info(m)
 
-# 成功メッセージの表示（toastを使用）
+# 成功メッセージの表示（successを使用して長く表示）
 if 'show_success_message' in st.session_state and st.session_state['show_success_message']:
-    st.toast(st.session_state['show_success_message'], icon="✅")
+    st.success(f"✅ {st.session_state['show_success_message']}")
     st.session_state['show_success_message'] = None
 
 df_res = load_reservations()
