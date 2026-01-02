@@ -230,6 +230,11 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 
 check_and_show_reminders()
 
+# 成功メッセージの表示
+if 'show_success_message' in st.session_state and st.session_state['show_success_message']:
+    st.success(st.session_state['show_success_message'])
+    st.session_state['show_success_message'] = None
+
 df_res = load_reservations()
 
 # リストの選択状態をクリアするためのカウンター
@@ -560,7 +565,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = load_reservations()
                     updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
                     save_reservations(updated_df)
-                    st.success("登録しました")
+                    st.session_state['show_success_message'] = "登録しました"
+                    st.session_state['is_popup_open'] = False
+                    st.session_state['last_click_signature'] = None
+                    st.session_state['active_event_idx'] = None
+                    st.session_state['list_reset_counter'] += 1
                     st.rerun()
         with col_close:
             if st.button("閉じる", use_container_width=True):
