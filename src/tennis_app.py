@@ -230,10 +230,19 @@ st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=Tr
 
 check_and_show_reminders()
 
-# 成功メッセージの表示
+# 成功メッセージの表示（タイムスタンプ付き）
 if 'show_success_message' in st.session_state and st.session_state['show_success_message']:
-    st.success(st.session_state['show_success_message'])
-    st.session_state['show_success_message'] = None
+    msg_data = st.session_state['show_success_message']
+    if isinstance(msg_data, dict):
+        msg_text = msg_data.get('text')
+        msg_time = msg_data.get('time')
+        # 5秒間表示
+        if (datetime.now() - msg_time).total_seconds() < 5:
+            st.success(msg_text)
+        else:
+            st.session_state['show_success_message'] = None
+    else:
+        st.session_state['show_success_message'] = None
 
 df_res = load_reservations()
 
@@ -565,7 +574,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = load_reservations()
                     updated_df = pd.concat([current_df, pd.DataFrame([new_row])], ignore_index=True)
                     save_reservations(updated_df)
-                    st.session_state['show_success_message'] = "登録しました"
+                    st.session_state['show_success_message'] = {'text': '登録しました', 'time': datetime.now()}
                     st.session_state['is_popup_open'] = False
                     st.session_state['last_click_signature'] = None
                     st.session_state['active_event_idx'] = None
