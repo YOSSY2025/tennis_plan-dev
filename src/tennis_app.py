@@ -695,7 +695,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     current_df = load_reservations()
                     current_df = current_df.drop(idx).reset_index(drop=True)
                     save_reservations(current_df)
-                    st.success("削除しました")
+                    st.session_state['show_success_message'] = '削除しました'
+                    st.session_state['is_popup_open'] = False
+                    st.session_state['last_click_signature'] = None
+                    st.session_state['active_event_idx'] = None
+                    st.session_state['list_reset_counter'] += 1
                     st.rerun()
 
 
