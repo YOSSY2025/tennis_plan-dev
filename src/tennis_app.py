@@ -328,7 +328,7 @@ if view_mode == "📅 カレンダー":
             "contentHeight": "auto",
             "aspectRatio": 1.2,
             "titleFormat": {"year": "numeric", "month": "2-digit"},
-            "longPressDelay": 200 
+            "longPressDelay": 500 
         },
         key=f"calendar_{cal_key}"
     )
