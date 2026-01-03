@@ -727,7 +727,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         
         # 施設情報表示
         if facility_url:
-            st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} ↗️</a>', unsafe_allow_html=True)
+            st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} </a>', unsafe_allow_html=True)
         else:
             st.markdown(f"**施設:** {r['facility']}")
         
