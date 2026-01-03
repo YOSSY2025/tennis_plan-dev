@@ -501,6 +501,7 @@ elif view_mode == "📋 予約リスト":
             on_select="rerun",
             selection_mode="single-row",
             key=table_key,
+            height="auto",
             column_config={
                 "日時": st.column_config.TextColumn("日時", width="medium"),
                 "施設": st.column_config.TextColumn("施設", width="medium"),
