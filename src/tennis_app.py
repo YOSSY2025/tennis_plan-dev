@@ -732,7 +732,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.markdown(f"**施設:** {r['facility']}")
         
         if facility_address:
-            st.markdown(f'<div style="font-size: 11px; background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; margin-top: 4px; font-family: monospace;">{facility_address}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size: 11px; background-color: #f0f2f6; padding: 4px 8px; border-radius: 4px; margin-top: 4px; font-family: monospace;"><a href="#" onclick="navigator.clipboard.writeText(\'\'{facility_address}\'\''); event.preventDefault(); return false;" style="color: #333; text-decoration: none;">{facility_address}</a></div>', unsafe_allow_html=True)
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
