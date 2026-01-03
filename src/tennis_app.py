@@ -732,7 +732,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.markdown(f"**施設:** {r['facility']}")
         
         if facility_address:
-            st.markdown(f"**住所:** {facility_address}")
+            map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
+            st.markdown(f'**住所:** <a href="{map_url}" target="_blank" style="color: #1f77b4;">{facility_address}</a>', unsafe_allow_html=True)
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
