@@ -173,6 +173,65 @@ def load_lottery_data_cached():
     except Exception:
         return pd.DataFrame()
 
+@st.cache_data(ttl=3600)
+def load_facilities_data():
+    """
+    facilitiesシートから施設情報を読み込む
+    
+    Returns:
+        dict: {施設名: {"url": URL, "address": 住所}}
+    """
+    try:
+        facilities_sheet = get_gsheet(GSHEET_ID, "facilities")
+        records = run_with_retry(facilities_sheet.get_all_records)
+        df = pd.DataFrame(records)
+        
+        facilities_dict = {}
+        for _, row in df.iterrows():
+            name = row.get("name", "")
+            if name:
+                facilities_dict[name] = {
+                    "url": row.get("url", ""),
+                    "address": row.get("address", "")
+                }
+        return facilities_dict
+    except Exception:
+        return {}
+
+def add_facility_if_not_exists(facility_name):
+    """
+    施設名がfacilitiesシートに存在しない場合、追加する
+    
+    Args:
+        facility_name: 施設名
+    """
+    if not facility_name:
+        return
+    
+    try:
+        facilities_sheet = get_gsheet(GSHEET_ID, "facilities")
+        records = run_with_retry(facilities_sheet.get_all_records)
+        df = pd.DataFrame(records)
+        
+        # 既存の施設名をチェック
+        if "name" in df.columns and facility_name in df["name"].values:
+            return  # 既に存在する
+        
+        # 新規追加
+        new_row = {"name": facility_name, "url": "", "address": ""}
+        new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+        
+        # 保存
+        values = [new_df.columns.values.tolist()] + new_df.values.tolist()
+        run_with_retry(facilities_sheet.clear)
+        run_with_retry(facilities_sheet.update, values)
+        
+        # キャッシュをクリア
+        load_facilities_data.clear()
+    except Exception as e:
+        # エラーが発生しても予約登録は続行
+        pass
+
 def check_and_show_reminders():
     df = load_lottery_data_cached()
     if df.empty: return []
@@ -590,6 +649,9 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 elif end_time <= start_time:
                     st.error("⚠️ 終了時間は開始時間より後にしてください")
                 else:
+                    # 施設名をfacilitiesシートに自動追加
+                    add_facility_if_not_exists(facility)
+                    
                     new_row = {
                         "date": to_jst_date(date_str),
                         "facility": facility,
@@ -639,6 +701,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
         r = df_res.loc[idx]
         
+        # 施設情報を取得
+        facilities_data = load_facilities_data()
+        facility_info = facilities_data.get(r['facility'], {})
+        facility_url = facility_info.get('url', '')
+        facility_address = facility_info.get('address', '')
+        
         def clean_join(lst):
             if not isinstance(lst, list): return 'なし'
             valid_names = [str(x) for x in lst if x and str(x).strip() != '']
@@ -657,7 +725,14 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         calendar_url = generate_google_calendar_url(r)
         st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
         
-        st.markdown(f"**施設:** {r['facility']} ")
+        # 施設情報表示
+        if facility_url:
+            st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} ↗️</a>', unsafe_allow_html=True)
+        else:
+            st.markdown(f"**施設:** {r['facility']}")
+        
+        if facility_address:
+            st.markdown(f"**住所:** {facility_address}")
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
