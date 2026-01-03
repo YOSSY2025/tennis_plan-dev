@@ -317,6 +317,22 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
+
+/* --- 予約リストのスクロール制御 --- */
+div[data-testid="stDataFrame"] {
+    height: auto !important;
+    max-height: none !important;
+}
+div[data-testid="stDataFrame"] > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
+div[data-testid="stDataFrame"] > div > div {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
