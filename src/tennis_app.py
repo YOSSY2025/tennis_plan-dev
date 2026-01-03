@@ -317,11 +317,6 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
 .stAppViewContainer { margin-top: 0.5rem !important; }
 .stApp { padding-top: 0 !important; }
 .block-container { padding-top: 2.0rem !important; }
-
-/* --- スマホでのスクロール制御 --- */
-div[data-testid="stDataFrame"] {
-    touch-action: pan-y pan-x !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
