@@ -320,8 +320,10 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
 
 /* --- 予約リストのスクロール制御 --- */
 div[data-testid="stDataFrame"] {
-    overflow-x: auto !important;
-    overflow-y: auto !important;
+    overflow: visible !important;
+}
+div[data-testid="stDataFrame"] > div {
+    overflow: visible !important;
 }
 </style>
 """, unsafe_allow_html=True)
