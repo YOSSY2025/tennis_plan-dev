@@ -732,8 +732,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.markdown(f"**施設:** {r['facility']}")
         
         if facility_address:
-            st.markdown(f"**住所:** {facility_address}")
-            st.code(facility_address, language=None)
+            col_addr, col_copy = st.columns([4, 1])
+            with col_addr:
+                st.markdown(f"**住所:** {facility_address}")
+            with col_copy:
+                st.code(facility_address, language=None)
         st.markdown(f"**ステータス:** {r['status']}")
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
