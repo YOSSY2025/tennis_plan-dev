@@ -83,6 +83,9 @@ def generate_google_calendar_url(reservation_data):
     return f"{base_url}?{'&'.join(params)}"
 
 
+# 設定: 長押しの閾値（ミリ秒）。ここを変えるとアプリ内の長押しの感度を調整できます。
+LONG_PRESS_DELAY_MS = 1200  # 1200ms = 1.2秒
+
 # ===== Google Sheets 認証 =====
 GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
 if not GSHEET_ID:
@@ -461,7 +464,7 @@ if view_mode == "📅 カレンダー":
             "contentHeight": "auto",
             "aspectRatio": 1.2,
             "titleFormat": {"year": "numeric", "month": "2-digit"},
-            "longPressDelay": 500 
+            "longPressDelay": LONG_PRESS_DELAY_MS  # ミリ秒（例: 1200 = 1.2秒）
         },
         key=f"calendar_{cal_key}"
     )
