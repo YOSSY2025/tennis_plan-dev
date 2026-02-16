@@ -810,7 +810,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             capacity_text = "指定なし"
         else:
             participants_count = len([p for p in r.get('participants', []) if p])
-            capacity_text = f"{int(capacity_display)}（現在{participants_count}名）"
+            capacity_text = f"{int(capacity_display)}名（現在{participants_count}名）"
         st.markdown(f"**定員:** {capacity_text}")
         
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
