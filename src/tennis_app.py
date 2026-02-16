@@ -810,9 +810,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             capacity_text = "指定なし"
         else:
             participants_count = len([p for p in r.get('participants', []) if p])
-            consider_count = len([c for c in r.get('consider', []) if c])
-            total_count = participants_count + consider_count
-            capacity_text = f"{total_count}/{int(capacity_display)}"
+            capacity_text = f"{int(capacity_display)}（現在{participants_count}名）"
         st.markdown(f"**定員:** {capacity_text}")
         
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
@@ -854,6 +852,15 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         capacity = current_df.at[idx, "capacity"]
                         current_status = current_df.at[idx, "status"]
                         
+                        # capacity を安全に数値変換
+                        if capacity is not None and capacity != "":
+                            try:
+                                capacity = int(capacity)
+                            except (ValueError, TypeError):
+                                capacity = None
+                        else:
+                            capacity = None
+                        
                         if part_type != "削除":
                             # 現在の参加者数（削除予定の人は除外、保留は除外）
                             temp_participants = [p for p in participants if p != nick]
@@ -863,8 +870,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                             
                             participants_count = len(temp_participants)
                             
-                            # 定員チェック
-                            if capacity is not None and current_status != "締切":
+                            # 定員チェック（定員が指定されている場合のみ）
+                            if capacity is not None:
                                 if participants_count > capacity:
                                     st.error(f"⚠️ 定員に達しています")
                                     st.stop()
