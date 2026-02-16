@@ -920,25 +920,72 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             edit_tab, delete_tab = st.tabs(["内容編集", "削除"])
             with edit_tab:
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
-                new_status = st.selectbox("ステータスの変更", ["募集中", "締切", "抽選中", "中止", "完了"], index=["募集中", "締切", "抽選中", "中止", "完了"].index(r['status']) if r['status'] in ["募集中", "締切", "抽選中", "中止", "完了"] else 0)
                 
-                # 定員編集
+                # 現在の参加者数を取得（ステータス制御用）
+                current_participants = r.get('participants', [])
+                participants_count = len([p for p in current_participants if p])
                 current_capacity = r.get('capacity')
-                capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
+                if current_capacity is not None and current_capacity != "":
+                    try:
+                        current_capacity = int(current_capacity)
+                    except (ValueError, TypeError):
+                        current_capacity = None
+                
+                # ステータス選択肢を制限
+                status_options = ["募集中", "締切", "抽選中", "中止", "完了"]
+                current_status = r['status']
+                
+                # 定員に達している場合、募集中は選べない
+                if current_capacity is not None and participants_count >= current_capacity:
+                    if "募集中" in status_options and current_status != "募集中":
+                        status_options.remove("募集中")
+                        st.info("💡 参加者数が定員に達しているため、「募集中」には変更できません")
+                
+                # 定員に達していない場合、締切は選べない
+                if current_capacity is None or participants_count < current_capacity:
+                    if "締切" in status_options and current_status != "締切":
+                        status_options.remove("締切")
+                        st.info("💡 定員に達していないため、「締切」には変更できません")
+                
+                current_status_index = status_options.index(current_status) if current_status in status_options else 0
+                new_status = st.selectbox("ステータスの変更", status_options, index=current_status_index)
+                
+                # 定員編集（参加人数より少ない値は設定不可）
+                capacity_options = ["指定なし"]
+                if participants_count > 0:
+                    capacity_options += [str(i) for i in range(participants_count, 31)]
+                else:
+                    capacity_options += [str(i) for i in range(1, 31)]
+                
                 current_capacity_index = 0
-                if current_capacity is not None:
-                    current_capacity_index = int(current_capacity)
+                if current_capacity is not None and current_capacity != "":
+                    if str(current_capacity) in capacity_options:
+                        current_capacity_index = capacity_options.index(str(current_capacity))
+                    elif current_capacity < participants_count:
+                        # 現在の定員が参加人数より少ない場合は、参加人数を選択肢に追加
+                        capacity_options = ["指定なし"] + [str(i) for i in range(participants_count, 31)]
+                        current_capacity_index = capacity_options.index(str(current_capacity)) if str(current_capacity) in capacity_options else 0
+                
+                # 定員に関する補足情報
+                st.caption(f"👥 現在の参加者数: {participants_count}名")
+                if participants_count > 0:
+                    st.caption(f"⚠️ 定員は最低でも {participants_count}名以上に設定してください")
+                
                 capacity_selected = st.selectbox("定員", options=capacity_options, index=current_capacity_index)
                 new_capacity = None if capacity_selected == "指定なし" else int(capacity_selected)
                 
                 if st.button("内容を更新", use_container_width=True):
-                    current_df = load_reservations()
-                    current_df.at[idx, "message"] = new_msg.replace('\n', '<br>')
-                    current_df.at[idx, "status"] = new_status
-                    current_df.at[idx, "capacity"] = new_capacity
-                    save_reservations(current_df)
-                    st.success("更新しました")
-                    st.rerun()
+                    # 最終チェック
+                    if new_capacity is not None and participants_count > new_capacity:
+                        st.error(f"⚠️ 定員は現在の参加者数（{participants_count}名）以上に設定してください")
+                    else:
+                        current_df = load_reservations()
+                        current_df.at[idx, "message"] = new_msg.replace('\n', '<br>')
+                        current_df.at[idx, "status"] = new_status
+                        current_df.at[idx, "capacity"] = new_capacity
+                        save_reservations(current_df)
+                        st.success("更新しました")
+                        st.rerun()
 
             with delete_tab:
                 st.warning("本当に削除しますか？")
