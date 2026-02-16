@@ -119,13 +119,23 @@ def load_reservations():
 
     expected_cols = [
         "date","facility","status","start_hour","start_minute",
-        "end_hour","end_minute","participants","absent","consider","message"
+        "end_hour","end_minute","capacity","participants","absent","consider","message"
     ]
     for c in expected_cols:
         if c not in df.columns:
             df[c] = ""
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    
+    # capacity を数値で処理（指定なしはNone）
+    def parse_capacity(val):
+        if pd.isna(val) or val == "" or str(val).lower() in ["なし", "指定なし"]:
+            return None
+        try:
+            return int(safe_int(val, default=None))
+        except:
+            return None
+    df["capacity"] = df["capacity"].apply(parse_capacity)
 
     def _to_list_cell(x):
         if isinstance(x, (list, tuple)): return list(x)
@@ -144,6 +154,10 @@ def save_reservations(df):
     for col in ["participants", "absent", "consider"]:
         if col in df_to_save.columns:
             df_to_save[col] = df_to_save[col].apply(lambda lst: ";".join(lst) if isinstance(lst, (list, tuple)) else (lst if pd.notnull(lst) else ""))
+    
+    # capacity を保存用に変換（None → 空文字）
+    if "capacity" in df_to_save.columns:
+        df_to_save["capacity"] = df_to_save["capacity"].apply(lambda x: "" if x is None else str(int(x)))
 
     if "date" in df_to_save.columns:
         df_to_save["date"] = df_to_save["date"].apply(lambda d: d.isoformat() if isinstance(d, (date, datetime, pd.Timestamp)) else (str(d) if pd.notnull(d) else ""))
@@ -381,7 +395,8 @@ if 'list_reset_counter' not in st.session_state:
     st.session_state['list_reset_counter'] = 0
 
 status_color = {
-    "確保": {"bg":"#90ee90","text":"black"},
+    "募集中": {"bg":"#90ee90","text":"black"},
+    "締切": {"bg":"#90ee90","text":"black"},
     "抽選中": {"bg":"#ffd966","text":"black"},
     "中止": {"bg":"#d3d3d3","text":"black"},
     "完了": {"bg":"#d3d3d3","text":"black"}
@@ -670,11 +685,16 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
         facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
-        status = st.selectbox("ステータス", ["確保", "抽選中", "中止"], index=1)
+        status = st.selectbox("ステータス", ["募集中", "締切", "抽選中", "中止", "完了"], index=0)
 
         col1, col2 = st.columns(2)
         with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
         with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
+
+        # 定員入力
+        capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
+        capacity_selected = st.selectbox("定員", options=capacity_options, index=0)
+        capacity = None if capacity_selected == "指定なし" else int(capacity_selected)
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
 
@@ -700,6 +720,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         "start_minute": start_time.minute,
                         "end_hour": end_time.hour,
                         "end_minute": end_time.minute,
+                        "capacity": capacity,
                         "participants": [],
                         "absent": [],
                         "consider": [],
@@ -775,6 +796,18 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
             st.markdown(f'**住所:** <a href="{map_url}" target="_blank" style="color: #1f77b4;">{facility_address}</a>', unsafe_allow_html=True)
         st.markdown(f"**ステータス:** {r['status']}")
+        
+        # 定員表示
+        capacity_display = r.get('capacity')
+        if capacity_display is None or capacity_display == "":
+            capacity_text = "指定なし"
+        else:
+            participants_count = len([p for p in r.get('participants', []) if p])
+            consider_count = len([c for c in r.get('consider', []) if c])
+            total_count = participants_count + consider_count
+            capacity_text = f"{total_count}/{int(capacity_display)}"
+        st.markdown(f"**定員:** {capacity_text}")
+        
         st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
         st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
         st.markdown(f"**メモ:**\n{display_msg}")
@@ -809,17 +842,48 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
                         absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
                         consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
-
+                        
+                        # 定員チェック（削除でない場合）
+                        capacity = current_df.at[idx, "capacity"]
+                        current_status = current_df.at[idx, "status"]
+                        
+                        if part_type != "削除":
+                            # 現在の参加者数（削除予定の人は除外、保留は除外）
+                            temp_participants = [p for p in participants if p != nick]
+                            if part_type == "参加":
+                                temp_participants.append(nick)
+                            # part_type == "保留" の場合は追加しない
+                            
+                            participants_count = len(temp_participants)
+                            
+                            # 定員チェック
+                            if capacity is not None and current_status != "締切":
+                                if participants_count > capacity:
+                                    st.error(f"⚠️ 定員に達しています")
+                                    st.stop()
+                        
+                        # 既存エントリを削除
                         if nick in participants: participants.remove(nick)
                         if nick in absent: absent.remove(nick)
                         if nick in consider: consider.remove(nick)
 
+                        # 新規追加
                         if part_type == "参加": participants.append(nick)
                         elif part_type == "保留": consider.append(nick)
                         
                         current_df.at[idx, "participants"] = participants
                         current_df.at[idx, "absent"] = absent
                         current_df.at[idx, "consider"] = consider
+                        
+                        # 自動ステータス変更ロジック（参加者数のみで判定）
+                        participants_count = len(participants)
+                        if capacity is not None:
+                            if participants_count >= capacity and current_status == "募集中":
+                                # 定員に達したら締切に
+                                current_df.at[idx, "status"] = "締切"
+                            elif participants_count < capacity and current_status == "締切":
+                                # 定員を下回ったら募集中に戻す
+                                current_df.at[idx, "status"] = "募集中"
                         
                         save_reservations(current_df)
                         st.success("反映しました")
@@ -838,12 +902,22 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             edit_tab, delete_tab = st.tabs(["内容編集", "削除"])
             with edit_tab:
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
-                new_status = st.selectbox("ステータスの変更", ["確保", "抽選中", "中止", "完了"], index=["確保", "抽選中", "中止", "完了"].index(r['status']) if r['status'] in ["確保", "抽選中", "中止", "完了"] else 0)
+                new_status = st.selectbox("ステータスの変更", ["募集中", "締切", "抽選中", "中止", "完了"], index=["募集中", "締切", "抽選中", "中止", "完了"].index(r['status']) if r['status'] in ["募集中", "締切", "抽選中", "中止", "完了"] else 0)
+                
+                # 定員編集
+                current_capacity = r.get('capacity')
+                capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
+                current_capacity_index = 0
+                if current_capacity is not None:
+                    current_capacity_index = int(current_capacity)
+                capacity_selected = st.selectbox("定員", options=capacity_options, index=current_capacity_index)
+                new_capacity = None if capacity_selected == "指定なし" else int(capacity_selected)
                 
                 if st.button("内容を更新", use_container_width=True):
                     current_df = load_reservations()
                     current_df.at[idx, "message"] = new_msg.replace('\n', '<br>')
                     current_df.at[idx, "status"] = new_status
+                    current_df.at[idx, "capacity"] = new_capacity
                     save_reservations(current_df)
                     st.success("更新しました")
                     st.rerun()
