@@ -157,7 +157,14 @@ def save_reservations(df):
     
     # capacity を保存用に変換（None → 空文字）
     if "capacity" in df_to_save.columns:
-        df_to_save["capacity"] = df_to_save["capacity"].apply(lambda x: "" if x is None else str(int(x)))
+        def format_capacity(x):
+            if x is None or x == "" or pd.isna(x):
+                return ""
+            try:
+                return str(int(x))
+            except (ValueError, TypeError):
+                return ""
+        df_to_save["capacity"] = df_to_save["capacity"].apply(format_capacity)
 
     if "date" in df_to_save.columns:
         df_to_save["date"] = df_to_save["date"].apply(lambda d: d.isoformat() if isinstance(d, (date, datetime, pd.Timestamp)) else (str(d) if pd.notnull(d) else ""))
