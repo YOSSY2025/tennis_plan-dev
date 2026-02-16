@@ -861,6 +861,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         else:
                             capacity = None
                         
+                        # 定員チェックとエラーフラグ
+                        capacity_error = False
                         if part_type != "削除":
                             # 現在の参加者数（削除予定の人は除外、保留は除外）
                             temp_participants = [p for p in participants if p != nick]
@@ -873,35 +875,37 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                             # 定員チェック（定員が指定されている場合のみ）
                             if capacity is not None:
                                 if participants_count > capacity:
-                                    st.error(f"⚠️ 定員に達しています")
-                                    st.stop()
+                                    st.error(f"⚠️ 定員に達しています（定員: {capacity}名）")
+                                    capacity_error = True
                         
-                        # 既存エントリを削除
-                        if nick in participants: participants.remove(nick)
-                        if nick in absent: absent.remove(nick)
-                        if nick in consider: consider.remove(nick)
+                        # エラーがない場合だけ保存
+                        if not capacity_error:
+                            # 既存エントリを削除
+                            if nick in participants: participants.remove(nick)
+                            if nick in absent: absent.remove(nick)
+                            if nick in consider: consider.remove(nick)
 
-                        # 新規追加
-                        if part_type == "参加": participants.append(nick)
-                        elif part_type == "保留": consider.append(nick)
-                        
-                        current_df.at[idx, "participants"] = participants
-                        current_df.at[idx, "absent"] = absent
-                        current_df.at[idx, "consider"] = consider
-                        
-                        # 自動ステータス変更ロジック（参加者数のみで判定）
-                        participants_count = len(participants)
-                        if capacity is not None:
-                            if participants_count >= capacity and current_status == "募集中":
-                                # 定員に達したら締切に
-                                current_df.at[idx, "status"] = "締切"
-                            elif participants_count < capacity and current_status == "締切":
-                                # 定員を下回ったら募集中に戻す
-                                current_df.at[idx, "status"] = "募集中"
-                        
-                        save_reservations(current_df)
-                        st.success("反映しました")
-                        st.rerun()
+                            # 新規追加
+                            if part_type == "参加": participants.append(nick)
+                            elif part_type == "保留": consider.append(nick)
+                            
+                            current_df.at[idx, "participants"] = participants
+                            current_df.at[idx, "absent"] = absent
+                            current_df.at[idx, "consider"] = consider
+                            
+                            # 自動ステータス変更ロジック（参加者数のみで判定）
+                            participants_count = len(participants)
+                            if capacity is not None:
+                                if participants_count >= capacity and current_status == "募集中":
+                                    # 定員に達したら締切に
+                                    current_df.at[idx, "status"] = "締切"
+                                elif participants_count < capacity and current_status == "締切":
+                                    # 定員を下回ったら募集中に戻す
+                                    current_df.at[idx, "status"] = "募集中"
+                            
+                            save_reservations(current_df)
+                            st.success("反映しました")
+                            st.rerun()
         with col_close_main:
             if st.button("閉じる", use_container_width=True):
                 st.session_state['is_popup_open'] = False
