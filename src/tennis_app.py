@@ -950,7 +950,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 if current_capacity is not None and participants_count < current_capacity:
                     if "締切" in status_options and current_status != "締切":
                         status_options.remove("締切")
-                        st.info("💡 定員が未達の場合は『締切』には変更できません")
                 
                 current_status_index = status_options.index(current_status) if current_status in status_options else 0
                 new_status = st.selectbox("ステータスの変更", status_options, index=current_status_index)
