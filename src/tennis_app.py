@@ -551,9 +551,18 @@ elif view_mode == "📋 予約リスト":
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         df_list['施設名'] = df_list['facility']
         df_list['ステータス'] = df_list['status']
+        # 定員表示（リスト用簡易版）
+        def format_capacity_for_list(cap):
+            if cap is None or cap == "" or pd.isna(cap):
+                return "指定なし"
+            try:
+                return f"{int(cap)}名"
+            except Exception:
+                return "指定なし"
+        df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
         df_list['メモ'] = df_list['message']
         
-        display_cols = ['日時', '施設名', 'ステータス', '参加者', 'メモ']
+        display_cols = ['日時', '施設名', 'ステータス', '定員', '参加者', 'メモ']
 
         df_display = df_list[display_cols]
         if '日時' in df_display.columns:
@@ -573,6 +582,7 @@ elif view_mode == "📋 予約リスト":
                 "日時": st.column_config.TextColumn("日時", width="medium"),
                 "施設": st.column_config.TextColumn("施設", width="medium"),
                 "状態": st.column_config.TextColumn("状態", width="small"),
+                "定員": st.column_config.TextColumn("定員", width="small"),
                 "参加者": st.column_config.TextColumn("参加者", width="large"),
                 "メモ": st.column_config.TextColumn("メモ", width="large"),
             }
