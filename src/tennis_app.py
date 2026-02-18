@@ -970,10 +970,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         capacity_options = ["指定なし"] + [str(i) for i in range(participants_count, 31)]
                         current_capacity_index = capacity_options.index(str(current_capacity)) if str(current_capacity) in capacity_options else 0
                 
-                # 定員に関する補足情報
-                st.caption(f"👥 現在の参加者数: {participants_count}名")
-                if participants_count > 0:
-                    st.caption(f"⚠️ 定員は最低でも {participants_count}名以上に設定してください")
+                # 定員に関する補足情報（初期メッセージ削除。エラー時のみ表示）
                 
                 capacity_selected = st.selectbox("定員", options=capacity_options, index=current_capacity_index)
                 new_capacity = None if capacity_selected == "指定なし" else int(capacity_selected)
