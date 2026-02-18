@@ -310,8 +310,12 @@ st.markdown(f"""
 <script>
 """, unsafe_allow_html=True)
 
-# アプリタイトルとバージョン
-st.markdown(f"<h3>🎾 テニスコート予約管理 <span style='font-size:0.6em'>v{APP_VERSION}</span></h3>", unsafe_allow_html=True)
+# アプリタイトル
+st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
+
+# バージョン表示（別行・小さく）
+# スマホでタイトルが改行される問題を回避するため、タイトルとは別に表示
+st.markdown(f"<div style='font-size:0.6em; text-align:right;'>v{APP_VERSION}</div>", unsafe_allow_html=True)
 
 st.markdown("""
 <script>
