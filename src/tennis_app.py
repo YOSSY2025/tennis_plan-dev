@@ -692,7 +692,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
         facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
-        status = st.selectbox("ステータス", ["募集中", "締切", "抽選中", "中止", "完了"], index=0)
+        # 新規登録時は募集中/抽選中のみ選択可能
+        status = st.selectbox("ステータス", ["募集中", "抽選中"], index=0)
 
         col1, col2 = st.columns(2)
         with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
@@ -944,11 +945,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         status_options.remove("募集中")
                         st.info("💡 参加者数が定員に達しているため、「募集中」には変更できません")
                 
-                # 定員に達していない場合、締切は選べない
-                if current_capacity is None or participants_count < current_capacity:
+                # 締切は「定員に達している」か定員未指定の場合のみ選択可
+                # そのため、容量が設定されていて参加者数が未達成であれば選択肢から除外する
+                if current_capacity is not None and participants_count < current_capacity:
                     if "締切" in status_options and current_status != "締切":
                         status_options.remove("締切")
-                        st.info("💡 定員に達していないため、「締切」には変更できません")
+                        st.info("💡 定員が未達の場合は『締切』には変更できません")
                 
                 current_status_index = status_options.index(current_status) if current_status in status_options else 0
                 new_status = st.selectbox("ステータスの変更", status_options, index=current_status_index)
