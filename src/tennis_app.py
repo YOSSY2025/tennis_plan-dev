@@ -943,7 +943,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 if current_capacity is not None and participants_count >= current_capacity:
                     if "募集中" in status_options and current_status != "募集中":
                         status_options.remove("募集中")
-                        st.info("💡 参加者数が定員に達しているため、「募集中」には変更できません")
                 
                 # 締切は「定員に達している」か定員未指定の場合のみ選択可
                 # そのため、容量が設定されていて参加者数が未達成であれば選択肢から除外する
