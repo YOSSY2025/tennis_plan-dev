@@ -311,7 +311,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # アプリタイトルとバージョン
-st.markdown(f"<h3>🎾 テニスコート予約管理 <span style='font-size:0.6em'>(v{APP_VERSION})</span></h3>", unsafe_allow_html=True)
+st.markdown(f"<h3>🎾 テニスコート予約管理 <span style='font-size:0.6em'>v{APP_VERSION}</span></h3>", unsafe_allow_html=True)
 
 st.markdown("""
 <script>
