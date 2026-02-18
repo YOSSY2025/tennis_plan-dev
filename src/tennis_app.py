@@ -3,6 +3,9 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from datetime import time as dt_time  
 from streamlit_calendar import calendar
+
+# アプリバージョン
+APP_VERSION = "1.0.0"
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -303,6 +306,13 @@ def check_and_show_reminders():
 # ==========================================
 # 4. 画面描画
 # ==========================================
+st.markdown(f"""
+<script>
+""", unsafe_allow_html=True)
+
+# アプリタイトルとバージョン
+st.markdown(f"<h3>🎾 テニスコート予約管理 <span style='font-size:0.6em'>(v{APP_VERSION})</span></h3>", unsafe_allow_html=True)
+
 st.markdown("""
 <script>
     // ポップアップが開いたら強制的に一番上にスクロールさせる
