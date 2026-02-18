@@ -353,10 +353,6 @@ div[data-testid="stDialog"] button[aria-label="Close"] {
 .block-container { padding-top: 2.0rem !important; }
 </style>
 """, unsafe_allow_html=True)
-
-
-st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
-
 # お知らせをトグルに表示
 reminder_messages = check_and_show_reminders()
 if reminder_messages:
