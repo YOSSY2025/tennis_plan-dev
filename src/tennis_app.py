@@ -6,6 +6,10 @@ from streamlit_calendar import calendar
 
 # アプリバージョン
 APP_VERSION = "1.0.0"
+
+# コート種類の定義（仕様書で固定）
+COURT_TYPES = ["オムニ", "クレー", "ハード", "インドア", "不明"]
+
 import gspread
 from google.oauth2.service_account import Credentials
 import json
@@ -58,8 +62,11 @@ def generate_google_calendar_url(reservation_data):
     Returns:
         str: Googleカレンダー登録用URL
     """
-    # タイトル生成: 🎾テニス_[施設名]
+    # タイトル生成: 🎾テニス_[施設名]（コート種類）
     title = f"🎾テニス_{reservation_data['facility']}"
+    ct = reservation_data.get('court_type')
+    if ct and ct != "不明":
+        title += f" ({ct})"
     
     # 日時生成: YYYYMMDDTHHMMSS形式
     res_date = reservation_data['date']
@@ -121,7 +128,7 @@ def load_reservations():
     df = pd.DataFrame(data)
 
     expected_cols = [
-        "date","facility","status","start_hour","start_minute",
+        "date","facility","court_type","status","start_hour","start_minute",
         "end_hour","end_minute","capacity","participants","absent","consider","message"
     ]
     for c in expected_cols:
@@ -129,6 +136,13 @@ def load_reservations():
             df[c] = ""
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+
+    # court_type 列が存在しないまたは空の場合は "不明" を設定
+    if "court_type" not in df.columns:
+        df["court_type"] = "不明"
+    # 空文字やNaNを扱う
+    df["court_type"] = df["court_type"].fillna("")
+    df.loc[df["court_type"] == "", "court_type"] = "不明"
     
     # capacity を数値で処理（指定なしはNone）
     def parse_capacity(val):
@@ -154,6 +168,8 @@ def load_reservations():
 def save_reservations(df):
     df_to_save = df.copy()
     
+    # court_type はそのまま保存（仕様で固定値なので変換不要）
+
     for col in ["participants", "absent", "consider"]:
         if col in df_to_save.columns:
             df_to_save[col] = df_to_save[col].apply(lambda lst: ";".join(lst) if isinstance(lst, (list, tuple)) else (lst if pd.notnull(lst) else ""))
@@ -439,7 +455,12 @@ for idx, r in df_res.iterrows():
     except Exception: continue
 
     color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
-    title_str = f"{r['status']} {r['facility']}"
+    # タイトルにコート種類も含める
+    ct_val = r.get('court_type')
+    if ct_val and ct_val != "不明":
+        title_str = f"{r['status']} {r['facility']} ({ct_val})"
+    else:
+        title_str = f"{r['status']} {r['facility']}"
 
     events.append({
         "id": idx,
@@ -554,6 +575,7 @@ elif view_mode == "📋 予約リスト":
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
         df_list['施設名'] = df_list['facility']
+        df_list['コート種類'] = df_list['court_type'].fillna('')
         df_list['ステータス'] = df_list['status']
         # 定員表示（リスト用簡易版）
         def format_capacity_for_list(cap):
@@ -566,7 +588,7 @@ elif view_mode == "📋 予約リスト":
         df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
         df_list['メモ'] = df_list['message']
         
-        display_cols = ['日時', '施設名', 'ステータス', '定員', '参加者', 'メモ']
+        display_cols = ['日時', '施設名', 'コート種類', 'ステータス', '定員', '参加者', 'メモ']
 
         df_display = df_list[display_cols]
         if '日時' in df_display.columns:
@@ -584,8 +606,9 @@ elif view_mode == "📋 予約リスト":
             height="auto",
             column_config={
                 "日時": st.column_config.TextColumn("日時", width="medium"),
-                "施設": st.column_config.TextColumn("施設", width="medium"),
-                "状態": st.column_config.TextColumn("状態", width="small"),
+                "施設名": st.column_config.TextColumn("施設名", width="medium"),
+                "コート種類": st.column_config.TextColumn("コート種類", width="small"),
+                "ステータス": st.column_config.TextColumn("ステータス", width="small"),
                 "定員": st.column_config.TextColumn("定員", width="small"),
                 "参加者": st.column_config.TextColumn("参加者", width="large"),
                 "メモ": st.column_config.TextColumn("メモ", width="large"),
@@ -712,6 +735,9 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
         facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
+        # コート種類（固定リスト）
+        court_type = st.selectbox("コート種類", options=COURT_TYPES, index=0)
+
         # 新規登録時は募集中/抽選中のみ選択可能
         status = st.selectbox("ステータス", ["募集中", "抽選中"], index=0)
 
@@ -734,6 +760,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             if st.button("登録する", type="primary", use_container_width=True):
                 if facility == "":
                     st.error("⚠️ 施設名を選択してください")
+                elif court_type == "":
+                    st.error("⚠️ コート種類を選択してください")
                 elif end_time <= start_time:
                     st.error("⚠️ 終了時間は開始時間より後にしてください")
                 else:
@@ -743,6 +771,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     new_row = {
                         "date": to_jst_date(date_str),
                         "facility": facility,
+                        "court_type": court_type,
                         "status": status,
                         "start_hour": start_time.hour,
                         "start_minute": start_time.minute,
@@ -819,6 +848,10 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} </a>', unsafe_allow_html=True)
         else:
             st.markdown(f"**施設:** {r['facility']}")
+        # コート種類表示
+        ct_val = r.get('court_type')
+        if ct_val:
+            st.markdown(f"**コート種類:** {ct_val}")
         
         if facility_address:
             map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
@@ -944,6 +977,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             edit_tab, delete_tab = st.tabs(["編集", "削除"])
             with edit_tab:
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
+                # コート種類編集
+                new_court = st.selectbox("コート種類", options=COURT_TYPES, index=COURT_TYPES.index(r.get('court_type')) if r.get('court_type') in COURT_TYPES else 0)
                 
                 # 現在の参加者数を取得（ステータス制御用）
                 current_participants = r.get('participants', [])
@@ -1003,6 +1038,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         current_df.at[idx, "message"] = new_msg.replace('\n', '<br>')
                         current_df.at[idx, "status"] = new_status
                         current_df.at[idx, "capacity"] = new_capacity
+                        current_df.at[idx, "court_type"] = new_court
                         save_reservations(current_df)
                         st.success("更新しました")
                         st.rerun()
