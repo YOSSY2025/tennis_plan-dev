@@ -121,7 +121,7 @@ def load_reservations():
     df = pd.DataFrame(data)
 
     expected_cols = [
-        "date","facility","court_type","status","start_hour","start_minute",
+        "date","facility","status","start_hour","start_minute",
         "end_hour","end_minute","capacity","participants","absent","consider","message"
     ]
     for c in expected_cols:
@@ -130,14 +130,6 @@ def load_reservations():
 
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
     
-    # court_type が存在しない、または空欄の場合は過去データ扱いで「不明」
-    # 登録・編集時には別途デフォルト「オムニ」を設定する
-    if "court_type" in df.columns:
-        df["court_type"] = df["court_type"].fillna("")
-        df.loc[df["court_type"] == "", "court_type"] = "不明"
-    else:
-        df["court_type"] = "不明"
-
     # capacity を数値で処理（指定なしはNone）
     def parse_capacity(val):
         if pd.isna(val) or val == "" or str(val).lower() in ["なし", "指定なし"]:
@@ -426,14 +418,6 @@ status_color = {
     "中止": {"bg":"#d3d3d3","text":"black"},
     "完了": {"bg":"#d3d3d3","text":"black"}
 }
-# court_type による色分け
-court_color = {
-    "オムニ": {"bg":"#aec7e8","text":"black"},
-    "クレー": {"bg":"#ffbb78","text":"black"},
-    "ハード": {"bg":"#98df8a","text":"black"},
-    "インドア": {"bg":"#c7c7c7","text":"black"},
-    "不明": {"bg":"#e0e0e0","text":"black"}
-}
 
 events = []
 for idx, r in df_res.iterrows():
@@ -454,14 +438,8 @@ for idx, r in df_res.iterrows():
         end_dt   = datetime.combine(curr_date, dt_time(e_hour, e_min))
     except Exception: continue
 
-    # 優先: court_type による色分け。該当なしはステータス色。
-    court_col = r.get('court_type', '')
-    if court_col and court_col in court_color:
-        color = court_color[court_col]
-    else:
-        color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
-    ct = r.get('court_type','')
-    title_str = f"{r['status']} {r['facility']}" + (f" ({ct})" if ct else "")
+    color = status_color.get(r["status"], {"bg":"#FFFFFF","text":"black"})
+    title_str = f"{r['status']} {r['facility']}"
 
     events.append({
         "id": idx,
@@ -483,7 +461,7 @@ if 'prev_view_mode' not in st.session_state:
 
 view_mode = st.radio(
     "表示モード", 
-    ["📅 カレンダー", "📋 予約リスト", "📈 実績確認"], 
+    ["📅 カレンダー", "📋 予約リスト"], 
     horizontal=True,
     label_visibility="collapsed",
     key="view_mode_selector"
@@ -530,66 +508,7 @@ elif view_mode == "📋 予約リスト":
     
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
-
-# === モード3: 実績確認 ===
-elif view_mode == "📈 実績確認":
-    # カレンダー・リストのイベント処理は不要
-    cal_state = None
-    # 個人選択用名前リスト
-    all_names = []
-    for col in ["participants"]:
-        if col in df_res.columns:
-            for lst in df_res[col]:
-                if isinstance(lst, list): all_names.extend([n for n in lst if n])
-                elif isinstance(lst, str) and lst.strip(): all_names.extend(lst.split(";"))
-    unique_names = sorted(set(all_names), key=lambda s: s)
-    person = st.selectbox("個人選択 (全体表示の場合は空欄)", [""] + unique_names)
-
-    # フィルタ適用
-    if person:
-        df_calc = df_res[df_res['participants'].apply(lambda lst: person in lst if isinstance(lst, list) else False)]
-    else:
-        df_calc = df_res.copy()
-
-    # 期間集計用の列を作成
-    if not df_calc.empty:
-        df_calc['date'] = pd.to_datetime(df_calc['date'])
-        df_calc['year_week'] = df_calc['date'].dt.strftime("%Y-%U")
-        df_calc['year_month'] = df_calc['date'].dt.strftime("%Y-%m")
-        # duration hours
-        def compute_hours(row):
-            try:
-                sh = float(safe_int(row.get('start_hour'), 0)) + float(safe_int(row.get('start_minute'),0))/60
-                eh = float(safe_int(row.get('end_hour'), 0)) + float(safe_int(row.get('end_minute'),0))/60
-                return max(eh - sh, 0)
-            except Exception:
-                return 0
-        df_calc['duration_hours'] = df_calc.apply(compute_hours, axis=1)
-
-        # 集計関数
-        def make_pivot(index_col, value_col):
-            pivot = df_calc.pivot_table(index=index_col, columns='court_type', values=value_col, aggfunc='sum', fill_value=0)
-            pivot = pivot.sort_index()
-            return pivot
-
-        count_week = df_calc.groupby(['year_week','court_type']).size().unstack(fill_value=0).sort_index()
-        time_week = make_pivot('year_week','duration_hours')
-        count_month = df_calc.groupby(['year_month','court_type']).size().unstack(fill_value=0).sort_index()
-        time_month = make_pivot('year_month','duration_hours')
-
-        st.subheader("週単位練習回数")
-        st.bar_chart(count_week)
-        st.subheader("週単位練習時間(時間)")
-        st.bar_chart(time_week)
-        st.subheader("月単位練習回数")
-        st.bar_chart(count_month)
-        st.subheader("月単位練習時間(時間)")
-        st.bar_chart(time_month)
-    else:
-        st.info("対象データがありません。")
-
-# 以下は予約リスト用の処理
-if view_mode == "📋 予約リスト":
+    
     if not df_list.empty:
         if not show_past:
             today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
@@ -634,60 +553,61 @@ if view_mode == "📋 予約リスト":
 
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['日時'] = df_list['日付'] + " " + df_list['時間']
-    df_list['施設名'] = df_list['facility']
-    df_list['コート種類'] = df_list.get('court_type', '')
-    df_list['ステータス'] = df_list['status']
-    # 定員表示（リスト用簡易版）
-    def format_capacity_for_list(cap):
-        if cap is None or cap == "" or pd.isna(cap):
-            return "指定なし"
-        try:
-            return f"{int(cap)}名"
-        except Exception:
-            return "指定なし"
-    df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
-    df_list['メモ'] = df_list['message']
-    
-    display_cols = ['日時', '施設名', 'コート種類', 'ステータス', '定員', '参加者', 'メモ']
-
-    df_display = df_list[display_cols]
-    if '日時' in df_display.columns:
-        df_display = df_display.sort_values('日時', ascending=True)
-
-    table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
-
-    event_selection = st.dataframe(
-        df_display,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        key=table_key,
-        height="auto",
-        column_config={
-            "日時": st.column_config.TextColumn("日時", width="medium"),
-            "施設": st.column_config.TextColumn("施設", width="medium"),
-            "状態": st.column_config.TextColumn("状態", width="small"),
-            "定員": st.column_config.TextColumn("定員", width="small"),
-            "参加者": st.column_config.TextColumn("参加者", width="large"),
-            "メモ": st.column_config.TextColumn("メモ", width="large"),
-        }
-    )
-    
-    if len(event_selection.selection.rows) > 0:
-        selected_row_idx = event_selection.selection.rows[0]
-        actual_idx = df_display.index[selected_row_idx]
+        df_list['施設名'] = df_list['facility']
+        df_list['ステータス'] = df_list['status']
+        # 定員表示（リスト用簡易版）
+        def format_capacity_for_list(cap):
+            if cap is None or cap == "" or pd.isna(cap):
+                return "指定なし"
+            try:
+                return f"{int(cap)}名"
+            except Exception:
+                return "指定なし"
+        df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
+        df_list['メモ'] = df_list['message']
         
-        # リストで選択が変わった時
-        if st.session_state.get('active_event_idx') != actual_idx:
-            st.session_state['active_event_idx'] = actual_idx
-            target_date = df_res.loc[actual_idx]["date"]
-            st.session_state['clicked_date'] = str(target_date)
+        display_cols = ['日時', '施設名', 'ステータス', '定員', '参加者', 'メモ']
+
+        df_display = df_list[display_cols]
+        if '日時' in df_display.columns:
+            df_display = df_display.sort_values('日時', ascending=True)
+
+        table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
+
+        event_selection = st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key=table_key,
+            height="auto",
+            column_config={
+                "日時": st.column_config.TextColumn("日時", width="medium"),
+                "施設": st.column_config.TextColumn("施設", width="medium"),
+                "状態": st.column_config.TextColumn("状態", width="small"),
+                "定員": st.column_config.TextColumn("定員", width="small"),
+                "参加者": st.column_config.TextColumn("参加者", width="large"),
+                "メモ": st.column_config.TextColumn("メモ", width="large"),
+            }
+        )
+        
+        if len(event_selection.selection.rows) > 0:
+            selected_row_idx = event_selection.selection.rows[0]
+            actual_idx = df_display.index[selected_row_idx]
             
-            # ポップアップON
-            st.session_state['is_popup_open'] = True
-            st.session_state['popup_mode'] = "edit"
-            st.rerun()
+            # リストで選択が変わった時
+            if st.session_state.get('active_event_idx') != actual_idx:
+                st.session_state['active_event_idx'] = actual_idx
+                target_date = df_res.loc[actual_idx]["date"]
+                st.session_state['clicked_date'] = str(target_date)
+                
+                # ポップアップON
+                st.session_state['is_popup_open'] = True
+                st.session_state['popup_mode'] = "edit"
+                st.rerun()
+    else:
+        st.info("表示できる予約データがありません。")
 
 
 # ==========================================
@@ -770,6 +690,9 @@ if cal_state:
                             target_date = df_res.loc[idx]["date"]
                             st.session_state['clicked_date'] = str(target_date)
                         st.session_state['popup_mode'] = "edit"
+                        st.session_state['list_reset_counter'] += 1
+                    
+                    st.rerun()
 
 
 # ==========================================
@@ -789,16 +712,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
         facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
-        court_type = st.selectbox("コート種類", ["オムニ", "クレー", "ハード", "インドア", "不明"], index=0)
-
         # 新規登録時は募集中/抽選中のみ選択可能
         status = st.selectbox("ステータス", ["募集中", "抽選中"], index=0)
 
         col1, col2 = st.columns(2)
         with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
         with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
-
-        # --- コート種類選択は既に上で定義されているため新規登録時に保持 ---
 
         # 定員入力
         capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
@@ -824,7 +743,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     new_row = {
                         "date": to_jst_date(date_str),
                         "facility": facility,
-                        "court_type": court_type,
                         "status": status,
                         "start_hour": start_time.hour,
                         "start_minute": start_time.minute,
@@ -901,11 +819,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} </a>', unsafe_allow_html=True)
         else:
             st.markdown(f"**施設:** {r['facility']}")
-        # 編集モードではコート種類も変更可能にする
-        court_orig = r.get('court_type','オムニ')
-        court_options = ["オムニ", "クレー", "ハード", "インドア", "不明"]
-        court_index = court_options.index(court_orig) if court_orig in court_options else 0
-        court_type_val = st.selectbox("コート種類", court_options, index=court_index)
         
         if facility_address:
             map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
@@ -1090,7 +1003,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         current_df.at[idx, "message"] = new_msg.replace('\n', '<br>')
                         current_df.at[idx, "status"] = new_status
                         current_df.at[idx, "capacity"] = new_capacity
-                        current_df.at[idx, "court_type"] = court_type_val
                         save_reservations(current_df)
                         st.success("更新しました")
                         st.rerun()
