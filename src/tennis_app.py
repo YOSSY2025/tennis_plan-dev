@@ -532,9 +532,41 @@ elif view_mode == "📋 予約リスト":
 
 # === モード3: 実績確認 ===
 elif view_mode == "📈 実績確認":
-    # 現状はプレースホルダ。後ほど実績表示ロジックを追加予定。
+    # 統計表示タブ
     cal_state = None
-    st.info("実績確認画面は現在未実装です。今後ここに集計結果が表示されます。")
+
+    if df_res.empty:
+        st.info("予約データがありません")
+    else:
+        # 生データから月単位の集計を行う
+        df_stats = df_res.copy()
+        # 期間計算: 開始と終了をdatetimeに変換
+        def compute_duration_hours(row):
+            try:
+                sh = int(safe_int(row.get('start_hour')))
+                sm = int(safe_int(row.get('start_minute')))
+                eh = int(safe_int(row.get('end_hour')))
+                em = int(safe_int(row.get('end_minute')))
+                start = datetime.combine(row['date'], dt_time(sh, sm))
+                end = datetime.combine(row['date'], dt_time(eh, em))
+                diff = end - start
+                return diff.total_seconds() / 3600.0
+            except Exception:
+                return 0.0
+        df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
+        # 月キー作成
+        df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y-%m'))
+        # グループ化
+        summary = df_stats.groupby('year_month').agg(
+            events_count=('date', 'count'),
+            total_hours=('duration_hours', 'sum')
+        ).reset_index()
+        # 見やすく整形
+        summary['total_hours'] = summary['total_hours'].round(2)
+
+        st.subheader("月別実績")
+        st.dataframe(summary, use_container_width=True)
+        st.markdown("*回数＝予約件数、時間＝合計練習時間（時間単位、小数第2位まで）*")
     
     if not df_list.empty:
         if not show_past:
