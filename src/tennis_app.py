@@ -535,14 +535,13 @@ elif view_mode == "📋 予約リスト":
             today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
             df_list = df_list[df_list['date'] >= today_jst]
 
-        def format_time_range(r):
-            sh = int(safe_int(r.get('start_hour')))
-            sm = int(safe_int(r.get('start_minute')))
-            eh = int(safe_int(r.get('end_hour')))
-            em = int(safe_int(r.get('end_minute')))
-            return f"{sh:02}:{sm:02} - {eh:02}:{em:02}"
-        
-        df_list['時間'] = df_list.apply(format_time_range, axis=1)
+        # 開始/終了を別々の列として作成
+        def format_time_only(r, hour_key, minute_key):
+            h = int(safe_int(r.get(hour_key)))
+            m = int(safe_int(r.get(minute_key)))
+            return f"{h:02}:{m:02}"
+        df_list['開始'] = df_list.apply(lambda r: format_time_only(r, 'start_hour', 'start_minute'), axis=1)
+        df_list['終了'] = df_list.apply(lambda r: format_time_only(r, 'end_hour', 'end_minute'), axis=1)
         
         def format_list_col(lst):
             if isinstance(lst, list): return ", ".join(lst)
@@ -573,7 +572,8 @@ elif view_mode == "📋 予約リスト":
             return f"{d.strftime('%Y-%m-%d')} {wd}"
 
         df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
-        df_list['日時'] = df_list['日付'] + " " + df_list['時間']
+        # keep date separately
+        df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
         df_list['施設名'] = df_list['facility']
         df_list['コート種類'] = df_list['court_type'].fillna('')
         df_list['ステータス'] = df_list['status']
@@ -588,11 +588,13 @@ elif view_mode == "📋 予約リスト":
         df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
         df_list['メモ'] = df_list['message']
         
-        display_cols = ['日時', '施設名', 'コート種類', 'ステータス', '定員', '参加者', 'メモ']
+        # 表示順は日付→施設名→コート種類→開始→終了→定員→ステータス→メモ→参加者
+        display_cols = ['日付','施設名', 'コート種類', '開始', '終了', '定員', 'ステータス', 'メモ', '参加者']
 
         df_display = df_list[display_cols]
-        if '日時' in df_display.columns:
-            df_display = df_display.sort_values('日時', ascending=True)
+        # ソート: 日付→開始時間→施設→コート
+        if '日付' in df_display.columns and '開始' in df_display.columns:
+            df_display = df_display.sort_values(['日付','開始','施設名','コート種類'], ascending=True)
 
         table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
 
@@ -605,13 +607,15 @@ elif view_mode == "📋 予約リスト":
             key=table_key,
             height="auto",
             column_config={
-                "日時": st.column_config.TextColumn("日時", width="medium"),
+                "日付": st.column_config.TextColumn("日付", width="medium"),
                 "施設名": st.column_config.TextColumn("施設名", width="medium"),
                 "コート種類": st.column_config.TextColumn("コート種類", width="small"),
-                "ステータス": st.column_config.TextColumn("ステータス", width="small"),
+                "開始": st.column_config.TextColumn("開始", width="small"),
+                "終了": st.column_config.TextColumn("終了", width="small"),
                 "定員": st.column_config.TextColumn("定員", width="small"),
-                "参加者": st.column_config.TextColumn("参加者", width="large"),
+                "ステータス": st.column_config.TextColumn("ステータス", width="small"),
                 "メモ": st.column_config.TextColumn("メモ", width="large"),
+                "参加者": st.column_config.TextColumn("参加者", width="large"),
             }
         )
         
@@ -738,9 +742,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         # コート種類（固定リスト）
         court_type = st.selectbox("コート種類", options=COURT_TYPES, index=0)
 
-        # 新規登録時は募集中/抽選中のみ選択可能
-        status = st.selectbox("ステータス", ["募集中", "抽選中"], index=0)
-
+        # 時刻入力は開始→終了の順
         col1, col2 = st.columns(2)
         with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
         with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
@@ -749,6 +751,9 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
         capacity_selected = st.selectbox("定員", options=capacity_options, index=0)
         capacity = None if capacity_selected == "指定なし" else int(capacity_selected)
+
+        # ステータスは定員のあとに
+        status = st.selectbox("ステータス", ["募集中", "抽選中"], index=0)
 
         message = st.text_area("メモ", placeholder="例：集合時間や持ち物など")
 
@@ -772,12 +777,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                         "date": to_jst_date(date_str),
                         "facility": facility,
                         "court_type": court_type,
-                        "status": status,
                         "start_hour": start_time.hour,
                         "start_minute": start_time.minute,
                         "end_hour": end_time.hour,
                         "end_minute": end_time.minute,
                         "capacity": capacity,
+                        "status": status,
                         "participants": [],
                         "absent": [],
                         "consider": [],
@@ -837,13 +842,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         else:
             display_msg = '（なし）'
         
-        st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
-        
-        # Googleカレンダーに追加リンク
-        calendar_url = generate_google_calendar_url(r)
-        st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
-        
-        # 施設情報表示
+        # 施設表示（リンク付きならリンク）
         if facility_url:
             st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} </a>', unsafe_allow_html=True)
         else:
@@ -853,10 +852,11 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         if ct_val:
             st.markdown(f"**コート種類:** {ct_val}")
         
-        if facility_address:
-            map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
-            st.markdown(f'**住所:** <a href="{map_url}" target="_blank" style="color: #1f77b4;">{facility_address}</a>', unsafe_allow_html=True)
-        st.markdown(f"**ステータス:** {r['status']}")
+        # 日時（開始〜終了）
+        st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
+        # Googleカレンダーリンクは日時の直後
+        calendar_url = generate_google_calendar_url(r)
+        st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
         
         # 定員表示
         capacity_display = r.get('capacity')
@@ -870,8 +870,10 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                 capacity_text = "指定なし"
         st.markdown(f"**定員:** {capacity_text}")
         
-        st.markdown(f"**参加:** {clean_join(r.get('participants'))}")
-        st.markdown(f"**保留:** {clean_join(r.get('consider'))}")
+        # ステータス
+        st.markdown(f"**ステータス:** {r['status']}")
+        
+        # メモ
         st.markdown(f"**メモ:**\n{display_msg}")
         
         st.markdown('<div style="margin-top: -20px;"></div>', unsafe_allow_html=True)
