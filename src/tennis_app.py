@@ -482,7 +482,7 @@ if 'prev_view_mode' not in st.session_state:
 
 view_mode = st.radio(
     "表示モード", 
-    ["📅 カレンダー", "📋 予約リスト"], 
+    ["📅 カレンダー", "📋 予約リスト", "📈 実績確認"],
     horizontal=True,
     label_visibility="collapsed",
     key="view_mode_selector"
@@ -529,6 +529,12 @@ elif view_mode == "📋 予約リスト":
     
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
+
+# === モード3: 実績確認 ===
+elif view_mode == "📈 実績確認":
+    # 現状はプレースホルダ。後ほど実績表示ロジックを追加予定。
+    cal_state = None
+    st.info("実績確認画面は現在未実装です。今後ここに集計結果が表示されます。")
     
     if not df_list.empty:
         if not show_past:
