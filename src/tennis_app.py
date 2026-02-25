@@ -535,13 +535,14 @@ elif view_mode == "📋 予約リスト":
             today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
             df_list = df_list[df_list['date'] >= today_jst]
 
-        # 開始/終了を別々の列として作成
-        def format_time_only(r, hour_key, minute_key):
-            h = int(safe_int(r.get(hour_key)))
-            m = int(safe_int(r.get(minute_key)))
-            return f"{h:02}:{m:02}"
-        df_list['開始'] = df_list.apply(lambda r: format_time_only(r, 'start_hour', 'start_minute'), axis=1)
-        df_list['終了'] = df_list.apply(lambda r: format_time_only(r, 'end_hour', 'end_minute'), axis=1)
+        def format_time_range(r):
+            sh = int(safe_int(r.get('start_hour')))
+            sm = int(safe_int(r.get('start_minute')))
+            eh = int(safe_int(r.get('end_hour')))
+            em = int(safe_int(r.get('end_minute')))
+            return f"{sh:02}:{sm:02} - {eh:02}:{em:02}"
+        
+        df_list['時間'] = df_list.apply(format_time_range, axis=1)
         
         def format_list_col(lst):
             if isinstance(lst, list): return ", ".join(lst)
@@ -735,17 +736,17 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         past_facilities = []
         if 'facility' in df_res.columns:
             past_facilities = df_res['facility'].dropna().unique().tolist()
-        
+
+        # 時刻入力は施設名より前に表示
+        col1, col2 = st.columns(2)
+        with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
+        with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
+
         facility_select = st.selectbox("施設名", options=["(施設名を選択)"] + past_facilities + ["新規登録"], index=0)
         facility = st.text_input("施設名を入力") if facility_select == "新規登録" else (facility_select if facility_select != "(施設名を選択)" else "")
 
         # コート種類（固定リスト）
         court_type = st.selectbox("コート種類", options=COURT_TYPES, index=0)
-
-        # 時刻入力は開始→終了の順
-        col1, col2 = st.columns(2)
-        with col1: start_time = st.time_input("開始時間", value=dt_time(9, 0), step=timedelta(minutes=30))
-        with col2: end_time = st.time_input("終了時間", value=dt_time(11, 0), step=timedelta(minutes=30))
 
         # 定員入力
         capacity_options = ["指定なし"] + [str(i) for i in range(1, 31)]
@@ -775,12 +776,12 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     
                     new_row = {
                         "date": to_jst_date(date_str),
-                        "facility": facility,
-                        "court_type": court_type,
                         "start_hour": start_time.hour,
                         "start_minute": start_time.minute,
                         "end_hour": end_time.hour,
                         "end_minute": end_time.minute,
+                        "facility": facility,
+                        "court_type": court_type,
                         "capacity": capacity,
                         "status": status,
                         "participants": [],
