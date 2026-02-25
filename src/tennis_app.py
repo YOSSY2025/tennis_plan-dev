@@ -843,22 +843,25 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         else:
             display_msg = '（なし）'
         
+        # 日時（開始〜終了）
+        st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
+        # Googleカレンダーリンク
+        calendar_url = generate_google_calendar_url(r)
+        st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
+
         # 施設表示（リンク付きならリンク）
         if facility_url:
             st.markdown(f'**施設:** <a href="{facility_url}" target="_blank" style="color: #1f77b4;">{r["facility"]} </a>', unsafe_allow_html=True)
         else:
             st.markdown(f"**施設:** {r['facility']}")
+        # 住所表示
+        if facility_address:
+            map_url = f"https://www.google.com/maps/search/?api=1&query={quote(facility_address)}"
+            st.markdown(f'**住所:** <a href="{map_url}" target="_blank" style="color: #1f77b4;">{facility_address}</a>', unsafe_allow_html=True)
         # コート種類表示
         ct_val = r.get('court_type')
         if ct_val:
             st.markdown(f"**コート種類:** {ct_val}")
-        
-        # 日時（開始〜終了）
-        st.markdown(f"**日時:** {r['date']} {int(safe_int(r.get('start_hour'))):02}:{int(safe_int(r.get('start_minute'))):02} - {int(safe_int(r.get('end_hour'))):02}:{int(safe_int(r.get('end_minute'))):02}")
-        # Googleカレンダーリンクは日時の直後
-        calendar_url = generate_google_calendar_url(r)
-        st.markdown(f'<a href="{calendar_url}" target="_blank" style="font-size: 14px; color: #1f77b4;">カレンダーに追加</a>', unsafe_allow_html=True)
-        
         # 定員表示
         capacity_display = r.get('capacity')
         if capacity_display is None or capacity_display == "":
@@ -870,10 +873,8 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             except (ValueError, TypeError):
                 capacity_text = "指定なし"
         st.markdown(f"**定員:** {capacity_text}")
-        
         # ステータス
         st.markdown(f"**ステータス:** {r['status']}")
-        
         # メモ
         st.markdown(f"**メモ:**\n{display_msg}")
         
