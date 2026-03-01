@@ -656,6 +656,7 @@ elif view_mode == "実績":
                 fig_count.update_layout(
 
                     yaxis_title='練習回数（回）',
+                    xaxis_tickangle=90,
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified',
@@ -686,6 +687,7 @@ elif view_mode == "実績":
                 fig_hours.update_layout(
                     
                     yaxis_title='練習時間（時間）',
+                    xaxis_tickangle=90,
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified',
