@@ -637,7 +637,7 @@ elif view_mode == "📈 実績確認":
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified'
                 )
-                st.plotly_chart(fig_count, use_container_width=True)
+                st.plotly_chart(fig_count, use_container_width=True, config={'staticPlot': True})
                 
                 # 練習時間の棒グラフ（コート種別で色分け・積み上げ）
                 fig_hours = px.bar(
@@ -659,7 +659,7 @@ elif view_mode == "📈 実績確認":
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified'
                 )
-                st.plotly_chart(fig_hours, use_container_width=True)
+                st.plotly_chart(fig_hours, use_container_width=True, config={'staticPlot': True})
 
 # === 予約リスト表示の続き（モード2専用） ===
 if view_mode == "📋 予約リスト" and not df_list.empty:
