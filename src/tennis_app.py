@@ -560,10 +560,9 @@ elif view_mode == "📈 実績確認":
                 return 0.0
         
         df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
-        df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y-%m'))
+        df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
         
         # フィルタUI
-        st.subheader("📊 実績確認")
         col1, col2 = st.columns([1, 1])
         
         with col1:
@@ -620,7 +619,7 @@ elif view_mode == "📈 実績確認":
             if len(summary_by_court) > 0:
                 st.markdown("---")
                 
-                # 練習回数の棒グラフ（コート種別で色分け）
+                # 練習回数の棒グラフ（コート種別で色分け・積み上げ）
                 fig_count = px.bar(
                     summary_by_court,
                     x='year_month',
@@ -629,9 +628,9 @@ elif view_mode == "📈 実績確認":
                     title=f'月別練習回数 - {selected_person}',
                     labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
                     text='events_count',
-                    barmode='group'
+                    barmode='stack'
                 )
-                fig_count.update_traces(textposition='outside')
+                fig_count.update_traces(textposition='inside', textfont=dict(color='white'))
                 fig_count.update_layout(
                     xaxis_title='年月',
                     yaxis_title='練習回数（回）',
@@ -641,7 +640,7 @@ elif view_mode == "📈 実績確認":
                 )
                 st.plotly_chart(fig_count, use_container_width=True)
                 
-                # 練習時間の棒グラフ（コート種別で色分け）
+                # 練習時間の棒グラフ（コート種別で色分け・積み上げ）
                 fig_hours = px.bar(
                     summary_by_court,
                     x='year_month',
@@ -650,9 +649,9 @@ elif view_mode == "📈 実績確認":
                     title=f'月別練習時間 - {selected_person}',
                     labels={'year_month': '年月', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
                     text='total_hours',
-                    barmode='group'
+                    barmode='stack'
                 )
-                fig_hours.update_traces(textposition='outside', texttemplate='%{text:.1f}')
+                fig_hours.update_traces(textposition='inside', texttemplate='%{text:.1f}', textfont=dict(color='white'))
                 fig_hours.update_layout(
                     xaxis_title='年月',
                     yaxis_title='練習時間（時間）',
