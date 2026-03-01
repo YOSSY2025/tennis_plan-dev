@@ -4,7 +4,6 @@ from datetime import datetime, date, timedelta
 from datetime import time as dt_time  
 from streamlit_calendar import calendar
 import plotly.express as px
-import plotly.graph_objects as go
 
 # アプリバージョン
 APP_VERSION = "1.0.0"
@@ -79,6 +78,37 @@ def generate_google_calendar_url(reservation_data):
     
     start_dt = datetime.combine(res_date, dt_time(start_hour, start_minute))
     end_dt = datetime.combine(res_date, dt_time(end_hour, end_minute))
+    
+    title_enc = quote(title)
+    dates = f"{start_dt.strftime('%Y%m%dT%H%M%S')}/{end_dt.strftime('%Y%m%dT%H%M%S')}"
+    return (
+        "https://calendar.google.com/calendar/render?action=TEMPLATE"
+        f"&text={title_enc}"
+        f"&dates={dates}"
+        "&ctz=Asia/Tokyo"
+    )
+
+
+LONG_PRESS_DELAY_MS = 400
+GSHEET_ID = st.secrets.get("GSHEET_ID", st.secrets.get("google_sheet_id", ""))
+
+
+@st.cache_resource
+def get_gspread_client():
+    creds = Credentials.from_service_account_info(
+        st.secrets["google"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+    )
+    return gspread.authorize(creds)
+
+
+def get_gsheet(spreadsheet_id: str, worksheet_name: str):
+    client = get_gspread_client()
+    spreadsheet = run_with_retry(client.open_by_key, spreadsheet_id)
+    return run_with_retry(spreadsheet.worksheet, worksheet_name)
+
+
+worksheet = get_gsheet(GSHEET_ID, "reservations")
     
 # 2. データ読み書き
 # ==========================================
@@ -521,97 +551,81 @@ elif view_mode == "📈 実績確認":
         df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
         df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
         
-        # フィルタUI
-        col1, col2 = st.columns([1, 1])
-        
-        with col1:
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
-            
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-        with col2:
-            # コート種類フィルタ
-            all_court_types = df_stats['court_type'].dropna().unique().tolist()
-            if all_court_types:
-                selected_court_types = st.multiselect(
-                    "コート種類フィルタ",
-                    options=all_court_types,
-                    default=all_court_types,
-                    key="stats_court_filter"
-                )
-            else:
-                selected_court_types = []
-        
-        # フィルタリング
+        all_participants = set()
+        for _, row in df_stats.iterrows():
+            participants = row.get('participants', [])
+            if isinstance(participants, list):
+                all_participants.update(participants)
+
+        participant_options = ["全体"] + sorted(list(all_participants))
+        selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
+
         df_filtered = df_stats.copy()
-        
-        # 個人フィルタ
         if selected_person != "全体":
             df_filtered = df_filtered[
                 df_filtered['participants'].apply(
                     lambda x: selected_person in x if isinstance(x, list) else False
                 )
             ]
-        
-        # コート種類フィルタ
-        if selected_court_types:
-            df_filtered = df_filtered[df_filtered['court_type'].isin(selected_court_types)]
-            # フィルタUI
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
-        
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-            # フィルタリング
-            df_filtered = df_stats.copy()
-        
-            # 個人フィルタ
-            if selected_person != "全体":
-                df_filtered = df_filtered[
-                    df_filtered['participants'].apply(
-                        lambda x: selected_person in x if isinstance(x, list) else False
-                    )
-                ]
-            df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
-            df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
-        
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-            df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
-            df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
-        
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
-        
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-            # フィルタリング
-            df_filtered = df_stats.copy()
-        
-            # 個人フィルタ
-            if selected_person != "全体":
-                df_filtered = df_filtered[
-                    df_filtered['participants'].apply(
-                        lambda x: selected_person in x if isinstance(x, list) else False
-                    )
-                ]
+
+        if df_filtered.empty:
+            st.warning("選択条件に該当するデータがありません")
+        else:
+            summary_by_court = df_filtered.groupby(['year_month', 'court_type']).agg(
+                events_count=('date', 'count'),
+                total_hours=('duration_hours', 'sum')
+            ).reset_index()
+            summary_by_court['total_hours'] = summary_by_court['total_hours'].round(2)
+            summary_by_court = summary_by_court.sort_values('year_month')
+
+            if len(summary_by_court) > 0:
+                st.markdown("---")
+
+                fig_count = px.bar(
+                    summary_by_court,
+                    x='year_month',
+                    y='events_count',
+                    color='court_type',
+                    title=f'月別練習回数 - {selected_person}',
+                    labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
+                    text='events_count',
+                    barmode='stack'
+                )
+                fig_count.update_traces(
+                    textposition='inside',
+                    textfont=dict(color='white'),
+                    texttemplate='%{text:.0f}',
+                    textangle=0
+                )
+                fig_count.update_layout(
+                    xaxis_title='年月',
+                    yaxis_title='練習回数（回）',
+                    height=500,
+                    margin=dict(b=120, l=80, r=80, t=100),
+                    hovermode='x unified'
+                )
+                st.plotly_chart(fig_count, use_container_width=True)
+
+                fig_hours = px.bar(
+                    summary_by_court,
+                    x='year_month',
+                    y='total_hours',
+                    color='court_type',
+                    title=f'月別練習時間 - {selected_person}',
+                    labels={'year_month': '年月', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
+                    text='total_hours',
+                    barmode='stack'
+                )
+                fig_hours.update_traces(
+                    textposition='inside',
+                    texttemplate='%{text:.0f}',
+                    textfont=dict(color='white'),
+                    textangle=0
+                )
+                fig_hours.update_layout(
+                    xaxis_title='年月',
+                    yaxis_title='練習時間（時間）',
+                    height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified'
                 )
