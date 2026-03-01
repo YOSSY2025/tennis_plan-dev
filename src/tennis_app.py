@@ -607,17 +607,22 @@ elif view_mode == "実績":
         if df_filtered.empty:
             st.warning("選択条件に該当するデータがありません")
         else:
-            # グループ化（月別集計）
-            summary_by_court = df_filtered.groupby('year_month').agg(
+            # グループ化（月別・コート種別集計）
+            summary_by_court = df_filtered.groupby(['year_month', 'court_type']).agg(
                 events_count=('date', 'count'),
                 total_hours=('duration_hours', 'sum')
             ).reset_index()
             summary_by_court['total_hours'] = summary_by_court['total_hours'].round(2)
             
-            # 全体と同じ軸を使用するため、足りない月をゼロで埋める
-            summary_by_court = pd.DataFrame({'year_month': all_year_months}).merge(
+            # 全体と同じ軸を使用するため、足りない月×コート種類をゼロで埋める
+            import itertools
+            all_combinations = pd.DataFrame(
+                list(itertools.product(all_year_months, all_court_types)),
+                columns=['year_month', 'court_type']
+            )
+            summary_by_court = all_combinations.merge(
                 summary_by_court,
-                on='year_month',
+                on=['year_month', 'court_type'],
                 how='left'
             )
             summary_by_court['events_count'] = summary_by_court['events_count'].fillna(0).astype(int)
