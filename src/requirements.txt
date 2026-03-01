@@ -1,2 +1,3 @@
 streamlit-calendar
 gspread
+plotly>=5.0.0
