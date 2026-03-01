@@ -651,7 +651,10 @@ elif view_mode == "📈 実績確認":
                     yaxis_title='練習回数（回）',
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    legend_orientation='h',
+                    legend_y=1.02,
+                    legend_title_text=''
                 )
                 st.plotly_chart(fig_count, use_container_width=True, config={'staticPlot': True})
                 
@@ -672,7 +675,10 @@ elif view_mode == "📈 実績確認":
                     yaxis_title='練習時間（時間）',
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
-                    hovermode='x unified'
+                    hovermode='x unified',
+                    legend_orientation='h',
+                    legend_y=1.02,
+                    legend_title_text=''
                 )
                 st.plotly_chart(fig_hours, use_container_width=True, config={'staticPlot': True})
 
