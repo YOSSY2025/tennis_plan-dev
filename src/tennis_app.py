@@ -1059,6 +1059,16 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         st.markdown(f"**定員:** {capacity_text}")
         # ステータス
         st.markdown(f"**ステータス:** {r['status']}")
+        # 参加者と保留を統合して表示
+        parts = []
+        participants = r.get('participants') if isinstance(r.get('participants'), list) else []
+        consider = r.get('consider') if isinstance(r.get('consider'), list) else []
+        if participants:
+            parts.append(", ".join([str(x) for x in participants if str(x).strip()]))
+        if consider:
+            parts.append(f"(保留 {', '.join([str(x) for x in consider if str(x).strip()])})")
+        participants_text = " ".join([p for p in parts if p]).strip()
+        st.markdown(f"**参加者:** {participants_text if participants_text else 'なし'}")
         # メモ
         st.markdown(f"**メモ:**\n{display_msg}")
         
