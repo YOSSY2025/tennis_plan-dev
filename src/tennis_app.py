@@ -562,32 +562,15 @@ elif view_mode == "📈 実績確認":
         df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
         df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
         
-        # フィルタUI
-        col1, col2 = st.columns([1, 1])
+        # フィルタUI（個人選択のみ）
+        all_participants = set()
+        for _, row in df_stats.iterrows():
+            participants = row.get('participants', [])
+            if isinstance(participants, list):
+                all_participants.update(participants)
         
-        with col1:
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
-            
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-        with col2:
-            # コート種類フィルタ
-            all_court_types = df_stats['court_type'].dropna().unique().tolist()
-            if all_court_types:
-                selected_court_types = st.multiselect(
-                    "コート種類フィルタ",
-                    options=all_court_types,
-                    default=all_court_types,
-                    key="stats_court_filter"
-                )
-            else:
-                selected_court_types = []
+        participant_options = ["全体"] + sorted(list(all_participants))
+        selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
         
         # フィルタリング
         df_filtered = df_stats.copy()
@@ -599,10 +582,6 @@ elif view_mode == "📈 実績確認":
                     lambda x: selected_person in x if isinstance(x, list) else False
                 )
             ]
-        
-        # コート種類フィルタ
-        if selected_court_types:
-            df_filtered = df_filtered[df_filtered['court_type'].isin(selected_court_types)]
         
         if df_filtered.empty:
             st.warning("選択条件に該当するデータがありません")
