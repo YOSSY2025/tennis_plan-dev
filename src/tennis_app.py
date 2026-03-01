@@ -608,94 +608,59 @@ elif view_mode == "📈 実績確認":
         if df_filtered.empty:
             st.warning("選択条件に該当するデータがありません")
         else:
-            # グループ化（月別集計）
-            summary = df_filtered.groupby('year_month').agg(
+            # グループ化（月別・コート種別集計）
+            summary_by_court = df_filtered.groupby(['year_month', 'court_type']).agg(
                 events_count=('date', 'count'),
                 total_hours=('duration_hours', 'sum')
             ).reset_index()
-            summary['total_hours'] = summary['total_hours'].round(2)
-            summary = summary.sort_values('year_month')
-            
-            # 月別表示
-            st.markdown("---")
-            st.subheader("📅 月別実績")
-            
-            # 表形式表示
-            summary_display = summary.copy()
-            summary_display.columns = ['年月', '練習回数', '練習時間（時間）']
-            st.dataframe(summary_display, use_container_width=True, hide_index=True)
+            summary_by_court['total_hours'] = summary_by_court['total_hours'].round(2)
+            summary_by_court = summary_by_court.sort_values('year_month')
             
             # 棒グラフ表示
-            if len(summary) > 0:
+            if len(summary_by_court) > 0:
                 st.markdown("---")
                 
-                # 練習回数の棒グラフ
+                # 練習回数の棒グラフ（コート種別で色分け）
                 fig_count = px.bar(
-                    summary,
+                    summary_by_court,
                     x='year_month',
                     y='events_count',
+                    color='court_type',
                     title=f'月別練習回数 - {selected_person}',
-                    labels={'year_month': '年月', 'events_count': '練習回数（回）'},
+                    labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
                     text='events_count',
-                    color_discrete_sequence=['#66bb6a']
+                    barmode='group'
                 )
                 fig_count.update_traces(textposition='outside')
                 fig_count.update_layout(
                     xaxis_title='年月',
                     yaxis_title='練習回数（回）',
-                    showlegend=False,
-                    height=400
+                    height=500,
+                    margin=dict(b=120, l=80, r=80, t=100),
+                    hovermode='x unified'
                 )
                 st.plotly_chart(fig_count, use_container_width=True)
                 
-                # 練習時間の棒グラフ
+                # 練習時間の棒グラフ（コート種別で色分け）
                 fig_hours = px.bar(
-                    summary,
+                    summary_by_court,
                     x='year_month',
                     y='total_hours',
+                    color='court_type',
                     title=f'月別練習時間 - {selected_person}',
-                    labels={'year_month': '年月', 'total_hours': '練習時間（時間）'},
+                    labels={'year_month': '年月', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
                     text='total_hours',
-                    color_discrete_sequence=['#42a5f5']
+                    barmode='group'
                 )
                 fig_hours.update_traces(textposition='outside', texttemplate='%{text:.1f}')
                 fig_hours.update_layout(
                     xaxis_title='年月',
                     yaxis_title='練習時間（時間）',
-                    showlegend=False,
-                    height=400
+                    height=500,
+                    margin=dict(b=120, l=80, r=80, t=100),
+                    hovermode='x unified'
                 )
                 st.plotly_chart(fig_hours, use_container_width=True)
-                
-                # コート種類別内訳（全体表示の場合のみ）
-                if selected_person == "全体" and 'court_type' in df_filtered.columns:
-                    st.markdown("---")
-                    st.subheader("🎾 コート種類別内訳")
-                    
-                    court_summary = df_filtered.groupby(['year_month', 'court_type']).agg(
-                        events_count=('date', 'count'),
-                        total_hours=('duration_hours', 'sum')
-                    ).reset_index()
-                    court_summary['total_hours'] = court_summary['total_hours'].round(2)
-                    
-                    if not court_summary.empty:
-                        fig_court = px.bar(
-                            court_summary,
-                            x='year_month',
-                            y='events_count',
-                            color='court_type',
-                            title='月別・コート種類別練習回数',
-                            labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
-                            text='events_count',
-                            barmode='stack'
-                        )
-                        fig_court.update_traces(textposition='inside')
-                        fig_court.update_layout(
-                            xaxis_title='年月',
-                            yaxis_title='練習回数（回）',
-                            height=400
-                        )
-                        st.plotly_chart(fig_court, use_container_width=True)
 
 # === 予約リスト表示の続き（モード2専用） ===
 if view_mode == "📋 予約リスト" and not df_list.empty:
