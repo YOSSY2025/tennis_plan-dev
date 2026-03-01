@@ -647,7 +647,7 @@ elif view_mode == "📈 実績確認":
                 )
                 fig_count.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
                 fig_count.update_layout(
-                    xaxis_title='年月',
+
                     yaxis_title='練習回数（回）',
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
@@ -676,7 +676,7 @@ elif view_mode == "📈 実績確認":
                 )
                 fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
                 fig_hours.update_layout(
-                    xaxis_title='年月',
+                    
                     yaxis_title='練習時間（時間）',
                     height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
