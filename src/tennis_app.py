@@ -80,6 +80,47 @@ def generate_google_calendar_url(reservation_data):
     start_dt = datetime.combine(res_date, dt_time(start_hour, start_minute))
     end_dt = datetime.combine(res_date, dt_time(end_hour, end_minute))
     
+    start_str = start_dt.strftime("%Y%m%dT%H%M%S")
+    end_str = end_dt.strftime("%Y%m%dT%H%M%S")
+    
+    # URL生成
+    base_url = "https://calendar.google.com/calendar/render"
+    params = [
+        "action=TEMPLATE",
+        f"text={quote(title)}",
+        f"dates={start_str}/{end_str}",
+        "ctz=Asia/Tokyo"
+    ]
+    
+    return f"{base_url}?{'&'.join(params)}"
+
+
+# 設定: 長押しの閾値（ミリ秒）。ここを変えるとアプリ内の長押しの感度を調整できます。
+LONG_PRESS_DELAY_MS = 1200  # 1200ms = 1.2秒
+
+# ===== Google Sheets 認証 =====
+GSHEET_ID = st.secrets.get("google", {}).get("GSHEET_ID")
+if not GSHEET_ID:
+    st.error("Secretsの設定エラー: [google] セクション内に GSHEET_ID が見つかりません。")
+    st.stop()
+
+@st.cache_resource(show_spinner=False)
+def get_gsheet(sheet_id, sheet_name):
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    service_account_info = dict(st.secrets["google"])
+    creds = Credentials.from_service_account_info(service_account_info, scopes=scope)
+    client = gspread.authorize(creds)
+    worksheet = client.open_by_key(sheet_id).worksheet(sheet_name)
+    return worksheet
+
+try:
+    worksheet = get_gsheet(GSHEET_ID, "reservations")
+except Exception as e:
+    st.error(f"Google Sheetへの接続に失敗しました: {e}")
+    st.stop()
+
+
+# ==========================================
 # 2. データ読み書き
 # ==========================================
 
@@ -562,56 +603,59 @@ elif view_mode == "📈 実績確認":
         # コート種類フィルタ
         if selected_court_types:
             df_filtered = df_filtered[df_filtered['court_type'].isin(selected_court_types)]
-            # フィルタUI
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
         
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-            # フィルタリング
-            df_filtered = df_stats.copy()
-        
-            # 個人フィルタ
-            if selected_person != "全体":
-                df_filtered = df_filtered[
-                    df_filtered['participants'].apply(
-                        lambda x: selected_person in x if isinstance(x, list) else False
-                    )
-                ]
-            df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
-            df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
-        
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-            df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
-            df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
-        
-            # 個人選択UI
-            all_participants = set()
-            for _, row in df_stats.iterrows():
-                participants = row.get('participants', [])
-                if isinstance(participants, list):
-                    all_participants.update(participants)
-        
-            participant_options = ["全体"] + sorted(list(all_participants))
-            selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
-        
-            # フィルタリング
-            df_filtered = df_stats.copy()
-        
-            # 個人フィルタ
-            if selected_person != "全体":
-                df_filtered = df_filtered[
-                    df_filtered['participants'].apply(
-                        lambda x: selected_person in x if isinstance(x, list) else False
-                    )
-                ]
+        if df_filtered.empty:
+            st.warning("選択条件に該当するデータがありません")
+        else:
+            # グループ化（月別・コート種別集計）
+            summary_by_court = df_filtered.groupby(['year_month', 'court_type']).agg(
+                events_count=('date', 'count'),
+                total_hours=('duration_hours', 'sum')
+            ).reset_index()
+            summary_by_court['total_hours'] = summary_by_court['total_hours'].round(2)
+            summary_by_court = summary_by_court.sort_values('year_month')
+            
+            # 棒グラフ表示
+            if len(summary_by_court) > 0:
+                st.markdown("---")
+                
+                # 練習回数の棒グラフ（コート種別で色分け・積み上げ）
+                fig_count = px.bar(
+                    summary_by_court,
+                    x='year_month',
+                    y='events_count',
+                    color='court_type',
+                    title=f'月別練習回数 - {selected_person}',
+                    labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
+                    text='events_count',
+                    barmode='stack'
+                )
+                fig_count.update_traces(textposition='inside', textfont=dict(color='white'), texttemplate='%{text:.0f}', textangle=0)
+                fig_count.update_layout(
+                    xaxis_title='年月',
+                    yaxis_title='練習回数（回）',
+                    height=500,
+                    margin=dict(b=120, l=80, r=80, t=100),
+                    hovermode='x unified'
+                )
+                st.plotly_chart(fig_count, use_container_width=True)
+                
+                # 練習時間の棒グラフ（コート種別で色分け・積み上げ）
+                fig_hours = px.bar(
+                    summary_by_court,
+                    x='year_month',
+                    y='total_hours',
+                    color='court_type',
+                    title=f'月別練習時間 - {selected_person}',
+                    labels={'year_month': '年月', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
+                    text='total_hours',
+                    barmode='stack'
+                )
+                fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textfont=dict(color='white'), textangle=0)
+                fig_hours.update_layout(
+                    xaxis_title='年月',
+                    yaxis_title='練習時間（時間）',
+                    height=500,
                     margin=dict(b=120, l=80, r=80, t=100),
                     hovermode='x unified'
                 )
