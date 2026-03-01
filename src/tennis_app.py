@@ -562,9 +562,11 @@ elif view_mode == "実績":
         df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
         df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
         
-        # 全体データから全年月とコート種類を取得（軸を統一するため）
-        all_year_months = sorted(df_stats['year_month'].unique())
-        all_court_types = sorted(df_stats['court_type'].dropna().unique())
+        # 期間選択（デフォルト: 全期間だが終了日は今月まで）
+        import calendar
+        today = datetime.now()
+        last_day_of_month = calendar.monthrange(today.year, today.month)[1]
+        default_end_date = date(today.year, today.month, last_day_of_month)
         
         # フィルタUI（個人選択のみ）
         all_participants = set()
@@ -576,19 +578,18 @@ elif view_mode == "実績":
         participant_options = ["全体"] + sorted(list(all_participants))
         selected_person = st.selectbox("表示対象", participant_options, key="stats_person_select")
         
-        # 期間選択（デフォルト: 全期間）
         use_date_range = st.checkbox("期間を指定する", value=False, key="stats_use_date_range")
         if use_date_range:
             col1, col2 = st.columns(2)
             min_date = df_stats['date'].min()
-            max_date = df_stats['date'].max()
+            max_date = default_end_date  # 今月まで
             with col1:
                 start_date = st.date_input("開始日", value=min_date, min_value=min_date, max_value=max_date, key="stats_start_date")
             with col2:
                 end_date = st.date_input("終了日", value=max_date, min_value=min_date, max_value=max_date, key="stats_end_date")
         else:
             start_date = df_stats['date'].min()
-            end_date = df_stats['date'].max()
+            end_date = default_end_date  # 今月まで
         
         # フィルタリング
         df_filtered = df_stats.copy()
@@ -606,6 +607,10 @@ elif view_mode == "実績":
         
         # 期間フィルタ
         df_filtered = df_filtered[(df_filtered['date'] >= start_date) & (df_filtered['date'] <= end_date)]
+        
+        # フィルタ後のデータから軸を再構築（今月までに制限）
+        all_year_months = sorted(df_filtered['year_month'].unique())
+        all_court_types = sorted(df_filtered['court_type'].dropna().unique())
         
         if df_filtered.empty:
             st.warning("選択条件に該当するデータがありません")
