@@ -562,6 +562,10 @@ elif view_mode == "📈 実績確認":
         df_stats['duration_hours'] = df_stats.apply(compute_duration_hours, axis=1)
         df_stats['year_month'] = df_stats['date'].apply(lambda d: d.strftime('%Y/%m'))
         
+        # 全体データから全年月とコート種類を取得（軸を統一するため）
+        all_year_months = sorted(df_stats['year_month'].unique())
+        all_court_types = sorted(df_stats['court_type'].dropna().unique())
+        
         # フィルタUI（個人選択のみ）
         all_participants = set()
         for _, row in df_stats.iterrows():
@@ -592,6 +596,21 @@ elif view_mode == "📈 実績確認":
                 total_hours=('duration_hours', 'sum')
             ).reset_index()
             summary_by_court['total_hours'] = summary_by_court['total_hours'].round(2)
+            
+            # 全体と同じ軸を使用するため、足りない月×コート種類をゼロで埋める
+            import itertools
+            all_combinations = pd.DataFrame(
+                list(itertools.product(all_year_months, all_court_types)),
+                columns=['year_month', 'court_type']
+            )
+            summary_by_court = all_combinations.merge(
+                summary_by_court,
+                on=['year_month', 'court_type'],
+                how='left'
+            )
+            summary_by_court['events_count'] = summary_by_court['events_count'].fillna(0).astype(int)
+            summary_by_court['total_hours'] = summary_by_court['total_hours'].fillna(0).round(2)
+            
             summary_by_court = summary_by_court.sort_values('year_month')
             
             # 棒グラフ表示
