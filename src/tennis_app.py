@@ -652,7 +652,7 @@ elif view_mode == "実績":
                     barmode='stack',
                     color_discrete_map=color_map
                 )
-                fig_count.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
+                fig_count.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white', size=14))
                 fig_count.update_layout(
 
                     yaxis_title='練習回数（回）',
@@ -682,7 +682,7 @@ elif view_mode == "実績":
                     barmode='stack',
                     color_discrete_map=color_map
                 )
-                fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
+                fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white', size=14))
                 fig_hours.update_layout(
                     
                     yaxis_title='練習時間（時間）',
