@@ -531,6 +531,8 @@ elif view_mode == "📋 予約リスト":
     
     show_past = st.checkbox("過去の予約も表示する", value=False, key="filter_show_past")
     df_list = df_res.copy()
+    
+    # 予約リストの表示処理はこの後に続く（L698以降のコード）
 
 # === モード3: 実績確認 ===
 elif view_mode == "📈 実績確認":
@@ -694,112 +696,114 @@ elif view_mode == "📈 実績確認":
                             height=400
                         )
                         st.plotly_chart(fig_court, use_container_width=True)
+
+# === 予約リスト表示の続き（モード2専用） ===
+if view_mode == "📋 予約リスト" and not df_list.empty:
+    if not show_past:
+        today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
+        df_list = df_list[df_list['date'] >= today_jst]
+
+    def format_time_range(r):
+        sh = int(safe_int(r.get('start_hour')))
+        sm = int(safe_int(r.get('start_minute')))
+        eh = int(safe_int(r.get('end_hour')))
+        em = int(safe_int(r.get('end_minute')))
+        return f"{sh:02}:{sm:02} - {eh:02}:{em:02}"
     
-    if not df_list.empty:
-        if not show_past:
-            today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
-            df_list = df_list[df_list['date'] >= today_jst]
+    df_list['時間'] = df_list.apply(format_time_range, axis=1)
+    
+    def format_list_col(lst):
+        if isinstance(lst, list): return ", ".join(lst)
+        return str(lst)
+    
+    # 参加者と保留を統合して表示
+    def format_participants_with_consider(row):
+        parts = []
+        participants = row['participants'] if isinstance(row['participants'], list) else []
+        consider = row['consider'] if isinstance(row['consider'], list) else []
+        
+        if participants:
+            parts.append(", ".join(participants))
+        if consider:
+            parts.append(f"(保留 {", ".join(consider)})")
+        
+        return " ".join(parts) if parts else ""
+    
+    df_list['参加者'] = df_list.apply(format_participants_with_consider, axis=1)
+    
+    # メモ欄の<br>をスペースに変換
+    df_list['message'] = df_list['message'].apply(lambda x: str(x).replace('<br>', ' ') if pd.notna(x) else '')
 
-        def format_time_range(r):
-            sh = int(safe_int(r.get('start_hour')))
-            sm = int(safe_int(r.get('start_minute')))
-            eh = int(safe_int(r.get('end_hour')))
-            em = int(safe_int(r.get('end_minute')))
-            return f"{sh:02}:{sm:02} - {eh:02}:{em:02}"
+    def format_date_with_weekday(d):
+        if not isinstance(d, (date, datetime)): return str(d)
+        weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
+        wd = weekdays[d.weekday()]
+        return f"{d.strftime('%Y-%m-%d')} {wd}"
+
+    df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
+    # keep date separately
+    df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
+    df_list['施設名'] = df_list['facility']
+    df_list['コート種類'] = df_list['court_type'].fillna('')
+    df_list['ステータス'] = df_list['status']
+    # 定員表示（リスト用簡易版）
+    def format_capacity_for_list(cap):
+        if cap is None or cap == "" or pd.isna(cap):
+            return "指定なし"
+        try:
+            return f"{int(cap)}名"
+        except Exception:
+            return "指定なし"
+    df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
+    df_list['メモ'] = df_list['message']
+    
+    # 表示順は日付→施設名→コート種類→開始→終了→定員→ステータス→メモ→参加者
+    display_cols = ['日付','施設名', 'コート種類', '開始', '終了', '定員', 'ステータス', 'メモ', '参加者']
+
+    df_display = df_list[display_cols]
+    # ソート: 日付→開始時間→施設→コート
+    if '日付' in df_display.columns and '開始' in df_display.columns:
+        df_display = df_display.sort_values(['日付','開始','施設名','コート種類'], ascending=True)
+
+    table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
+
+    event_selection = st.dataframe(
+        df_display,
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=table_key,
+        height="auto",
+        column_config={
+            "日付": st.column_config.TextColumn("日付", width="medium"),
+            "施設名": st.column_config.TextColumn("施設名", width="medium"),
+            "コート種類": st.column_config.TextColumn("コート種類", width="small"),
+            "開始": st.column_config.TextColumn("開始", width="small"),
+            "終了": st.column_config.TextColumn("終了", width="small"),
+            "定員": st.column_config.TextColumn("定員", width="small"),
+            "ステータス": st.column_config.TextColumn("ステータス", width="small"),
+            "メモ": st.column_config.TextColumn("メモ", width="large"),
+            "参加者": st.column_config.TextColumn("参加者", width="large"),
+        }
+    )
+    
+    if len(event_selection.selection.rows) > 0:
+        selected_row_idx = event_selection.selection.rows[0]
+        actual_idx = df_display.index[selected_row_idx]
         
-        df_list['時間'] = df_list.apply(format_time_range, axis=1)
-        
-        def format_list_col(lst):
-            if isinstance(lst, list): return ", ".join(lst)
-            return str(lst)
-        
-        # 参加者と保留を統合して表示
-        def format_participants_with_consider(row):
-            parts = []
-            participants = row['participants'] if isinstance(row['participants'], list) else []
-            consider = row['consider'] if isinstance(row['consider'], list) else []
+        # リストで選択が変わった時
+        if st.session_state.get('active_event_idx') != actual_idx:
+            st.session_state['active_event_idx'] = actual_idx
+            target_date = df_res.loc[actual_idx]["date"]
+            st.session_state['clicked_date'] = str(target_date)
             
-            if participants:
-                parts.append(", ".join(participants))
-            if consider:
-                parts.append(f"(保留 {", ".join(consider)})")
-            
-            return " ".join(parts) if parts else ""
-        
-        df_list['参加者'] = df_list.apply(format_participants_with_consider, axis=1)
-        
-        # メモ欄の<br>をスペースに変換
-        df_list['message'] = df_list['message'].apply(lambda x: str(x).replace('<br>', ' ') if pd.notna(x) else '')
-
-        def format_date_with_weekday(d):
-            if not isinstance(d, (date, datetime)): return str(d)
-            weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
-            wd = weekdays[d.weekday()]
-            return f"{d.strftime('%Y-%m-%d')} {wd}"
-
-        df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
-        # keep date separately
-        df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
-        df_list['施設名'] = df_list['facility']
-        df_list['コート種類'] = df_list['court_type'].fillna('')
-        df_list['ステータス'] = df_list['status']
-        # 定員表示（リスト用簡易版）
-        def format_capacity_for_list(cap):
-            if cap is None or cap == "" or pd.isna(cap):
-                return "指定なし"
-            try:
-                return f"{int(cap)}名"
-            except Exception:
-                return "指定なし"
-        df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
-        df_list['メモ'] = df_list['message']
-        
-        # 表示順は日付→施設名→コート種類→開始→終了→定員→ステータス→メモ→参加者
-        display_cols = ['日付','施設名', 'コート種類', '開始', '終了', '定員', 'ステータス', 'メモ', '参加者']
-
-        df_display = df_list[display_cols]
-        # ソート: 日付→開始時間→施設→コート
-        if '日付' in df_display.columns and '開始' in df_display.columns:
-            df_display = df_display.sort_values(['日付','開始','施設名','コート種類'], ascending=True)
-
-        table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
-
-        event_selection = st.dataframe(
-            df_display,
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-            key=table_key,
-            height="auto",
-            column_config={
-                "日付": st.column_config.TextColumn("日付", width="medium"),
-                "施設名": st.column_config.TextColumn("施設名", width="medium"),
-                "コート種類": st.column_config.TextColumn("コート種類", width="small"),
-                "開始": st.column_config.TextColumn("開始", width="small"),
-                "終了": st.column_config.TextColumn("終了", width="small"),
-                "定員": st.column_config.TextColumn("定員", width="small"),
-                "ステータス": st.column_config.TextColumn("ステータス", width="small"),
-                "メモ": st.column_config.TextColumn("メモ", width="large"),
-                "参加者": st.column_config.TextColumn("参加者", width="large"),
-            }
-        )
-        
-        if len(event_selection.selection.rows) > 0:
-            selected_row_idx = event_selection.selection.rows[0]
-            actual_idx = df_display.index[selected_row_idx]
-            
-            # リストで選択が変わった時
-            if st.session_state.get('active_event_idx') != actual_idx:
-                st.session_state['active_event_idx'] = actual_idx
-                target_date = df_res.loc[actual_idx]["date"]
-                st.session_state['clicked_date'] = str(target_date)
-                
-                # ポップアップON
-                st.session_state['is_popup_open'] = True
-                st.session_state['popup_mode'] = "edit"
-                st.rerun()
-    else:
+            # ポップアップON
+            st.session_state['is_popup_open'] = True
+            st.session_state['popup_mode'] = "edit"
+            st.rerun()
+else:
+    if view_mode == "📋 予約リスト":
         st.info("表示できる予約データがありません。")
 
 
