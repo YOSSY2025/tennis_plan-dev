@@ -641,7 +641,7 @@ elif view_mode == "📈 実績確認":
                     y='events_count',
                     color='court_type',
                     title=f'月別練習回数 - {selected_person}',
-                    labels={'year_month': '年月', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
+                    labels={'year_month': '', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
                     text='events_count',
                     barmode='stack'
                 )
@@ -670,7 +670,7 @@ elif view_mode == "📈 実績確認":
                     y='total_hours',
                     color='court_type',
                     title=f'月別練習時間 - {selected_person}',
-                    labels={'year_month': '年月', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
+                    labels={'year_month': '', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
                     text='total_hours',
                     barmode='stack'
                 )
