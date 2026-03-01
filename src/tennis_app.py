@@ -564,7 +564,7 @@ elif view_mode == "実績":
         
         # 期間選択（デフォルト: 全期間だが終了日は今月まで）
         import calendar
-        today = datetime.now()
+        today = (datetime.utcnow() + timedelta(hours=9)).date()  # 日本時刻
         last_day_of_month = calendar.monthrange(today.year, today.month)[1]
         default_end_date = date(today.year, today.month, last_day_of_month)
         
