@@ -635,6 +635,12 @@ elif view_mode == "実績":
                 st.markdown("---")
                 
                 # 練習回数の棒グラフ（コート種別で色分け・積み上げ）
+                color_map = {
+                    '不明': '#808080',  # グレー
+                    'ハード': '#00AA00',  # 緑
+                    'オムニ': '#0066FF',  # 青
+                    'クレー': '#FF8800'  # オレンジ
+                }
                 fig_count = px.bar(
                     summary_by_court,
                     x='year_month',
@@ -643,7 +649,8 @@ elif view_mode == "実績":
                     title=f'月別練習回数 - {selected_person}',
                     labels={'year_month': '', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
                     text='events_count',
-                    barmode='stack'
+                    barmode='stack',
+                    color_discrete_map=color_map
                 )
                 fig_count.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
                 fig_count.update_layout(
@@ -672,7 +679,8 @@ elif view_mode == "実績":
                     title=f'月別練習時間 - {selected_person}',
                     labels={'year_month': '', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
                     text='total_hours',
-                    barmode='stack'
+                    barmode='stack',
+                    color_discrete_map=color_map
                 )
                 fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white'))
                 fig_hours.update_layout(
