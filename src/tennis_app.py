@@ -608,8 +608,15 @@ elif view_mode == "実績":
         # 期間フィルタ
         df_filtered = df_filtered[(df_filtered['date'] >= start_date) & (df_filtered['date'] <= end_date)]
         
-        # フィルタ後のデータから軸を再構築（今月までに制限）
-        all_year_months = sorted(df_filtered['year_month'].unique())
+        # 全月を軸とする：start_dateからend_dateまでのすべての月を生成
+        from dateutil.relativedelta import relativedelta
+        all_months = []
+        current = start_date.replace(day=1)
+        end_of_range = end_date.replace(day=1)
+        while current <= end_of_range:
+            all_months.append(current.strftime('%Y/%m'))
+            current += relativedelta(months=1)
+        all_year_months = sorted(all_months)
         all_court_types = sorted(df_filtered['court_type'].dropna().unique())
         
         if df_filtered.empty:
