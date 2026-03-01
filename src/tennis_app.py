@@ -593,6 +593,9 @@ elif view_mode == "実績":
         # フィルタリング
         df_filtered = df_stats.copy()
         
+        # 実績フィルタ: 完了ステータスのみをカウント（参加者として含まれている場合）
+        df_filtered = df_filtered[df_filtered['status'] == '完了']
+        
         # 個人フィルタ
         if selected_person != "全体":
             df_filtered = df_filtered[
