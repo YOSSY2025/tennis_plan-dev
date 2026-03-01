@@ -705,8 +705,7 @@ if view_mode == "📋 予約リスト" and not df_list.empty:
         return f"{d.strftime('%Y-%m-%d')} {wd}"
 
     df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
-    # keep date separately
-    df_list['日付'] = df_list['date'].apply(format_date_with_weekday)
+    df_list['日時'] = df_list['日付'] + " " + df_list['時間']
     df_list['施設名'] = df_list['facility']
     df_list['コート種類'] = df_list['court_type'].fillna('')
     df_list['ステータス'] = df_list['status']
@@ -721,13 +720,11 @@ if view_mode == "📋 予約リスト" and not df_list.empty:
     df_list['定員'] = df_list['capacity'].apply(format_capacity_for_list)
     df_list['メモ'] = df_list['message']
     
-    # 表示順は日付→施設名→コート種類→開始→終了→定員→ステータス→メモ→参加者
-    display_cols = ['日付','施設名', 'コート種類', '開始', '終了', '定員', 'ステータス', 'メモ', '参加者']
+    display_cols = ['日時', '施設名', 'コート種類', 'ステータス', '定員', '参加者', 'メモ']
 
     df_display = df_list[display_cols]
-    # ソート: 日付→開始時間→施設→コート
-    if '日付' in df_display.columns and '開始' in df_display.columns:
-        df_display = df_display.sort_values(['日付','開始','施設名','コート種類'], ascending=True)
+    if '日時' in df_display.columns:
+        df_display = df_display.sort_values('日時', ascending=True)
 
     table_key = f"reservation_list_table_{st.session_state['list_reset_counter']}"
 
@@ -740,15 +737,13 @@ if view_mode == "📋 予約リスト" and not df_list.empty:
         key=table_key,
         height="auto",
         column_config={
-            "日付": st.column_config.TextColumn("日付", width="medium"),
+            "日時": st.column_config.TextColumn("日時", width="medium"),
             "施設名": st.column_config.TextColumn("施設名", width="medium"),
             "コート種類": st.column_config.TextColumn("コート種類", width="small"),
-            "開始": st.column_config.TextColumn("開始", width="small"),
-            "終了": st.column_config.TextColumn("終了", width="small"),
-            "定員": st.column_config.TextColumn("定員", width="small"),
             "ステータス": st.column_config.TextColumn("ステータス", width="small"),
-            "メモ": st.column_config.TextColumn("メモ", width="large"),
+            "定員": st.column_config.TextColumn("定員", width="small"),
             "参加者": st.column_config.TextColumn("参加者", width="large"),
+            "メモ": st.column_config.TextColumn("メモ", width="large"),
         }
     )
     
