@@ -484,7 +484,7 @@ if 'prev_view_mode' not in st.session_state:
 
 view_mode = st.radio(
     "表示モード", 
-    ["📅 カレンダー", "📋 予約リスト", "📈 実績確認"],
+    ["📅 カレンダー", "📋 リスト", "📈 実績"],
     horizontal=True,
     label_visibility="collapsed",
     key="view_mode_selector"
@@ -525,7 +525,7 @@ if view_mode == "📅 カレンダー":
     )
 
 # === モード2: 予約リスト表示 ===
-elif view_mode == "📋 予約リスト":
+elif view_mode == "📋 リスト":
     # ★重要: カレンダー変数を空にしておく（下のイベントハンドリングを無効化するため）
     cal_state = None 
     
@@ -535,7 +535,7 @@ elif view_mode == "📋 予約リスト":
     # 予約リストの表示処理はこの後に続く（L698以降のコード）
 
 # === モード3: 実績確認 ===
-elif view_mode == "📈 実績確認":
+elif view_mode == "📈 実績":
     # 統計表示タブ
     cal_state = None
 
@@ -693,7 +693,7 @@ elif view_mode == "📈 実績確認":
                 st.plotly_chart(fig_hours, use_container_width=True, config={'staticPlot': True})
 
 # === 予約リスト表示の続き（モード2専用） ===
-if view_mode == "📋 予約リスト" and not df_list.empty:
+if view_mode == "📋 リスト" and not df_list.empty:
     if not show_past:
         today_jst = (datetime.utcnow() + timedelta(hours=9)).date()
         df_list = df_list[df_list['date'] >= today_jst]
@@ -793,7 +793,7 @@ if view_mode == "📋 予約リスト" and not df_list.empty:
             st.session_state['popup_mode'] = "edit"
             st.rerun()
 else:
-    if view_mode == "📋 予約リスト":
+    if view_mode == "📋 リスト":
         st.info("表示できる予約データがありません。")
 
 
