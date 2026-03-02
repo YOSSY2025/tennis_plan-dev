@@ -1094,6 +1094,86 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_type:
             part_type = st.radio("区分", ["参加", "保留", "削除"], horizontal=True, key="edit_type")
 
+        col_upd, col_close_main = st.columns([1, 1])
+        with col_upd:
+            if st.button("反映する", type="primary", use_container_width=True):
+                if not nick:
+                    st.warning("名前を選択してください")
+                else:
+                    current_df = load_reservations()
+                    if idx in current_df.index:
+                        participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
+                        absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
+                        consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
+                        
+                        # 定員チェック（削除でない場合）
+                        capacity = current_df.at[idx, "capacity"]
+                        current_status = current_df.at[idx, "status"]
+                        
+                        # capacity を安全に数値変換
+                        if capacity is not None and capacity != "":
+                            try:
+                                capacity = int(capacity)
+                            except (ValueError, TypeError):
+                                capacity = None
+                        else:
+                            capacity = None
+                        
+                        # 定員チェックとエラーフラグ
+                        capacity_error = False
+                        if part_type != "削除":
+                            # 現在の参加者数（削除予定の人は除外、保留は除外）
+                            temp_participants = [p for p in participants if p != nick]
+                            if part_type == "参加":
+                                temp_participants.append(nick)
+                            # part_type == "保留" の場合は追加しない
+                            
+                            participants_count = len(temp_participants)
+                            
+                            # 定員チェック（定員が指定されている場合のみ）
+                            if capacity is not None:
+                                if participants_count > capacity:
+                                    st.error(f"⚠️ 定員に達しています（定員: {capacity}名）")
+                                    capacity_error = True
+                        
+                        # エラーがない場合だけ保存
+                        if not capacity_error:
+                            # 既存エントリを削除
+                            if nick in participants: participants.remove(nick)
+                            if nick in absent: absent.remove(nick)
+                            if nick in consider: consider.remove(nick)
+
+                            # 新規追加
+                            if part_type == "参加": participants.append(nick)
+                            elif part_type == "保留": consider.append(nick)
+                            
+                            current_df.at[idx, "participants"] = participants
+                            current_df.at[idx, "absent"] = absent
+                            current_df.at[idx, "consider"] = consider
+                            
+                            # 自動ステータス変更ロジック（参加者数のみで判定）
+                            participants_count = len(participants)
+                            if capacity is not None:
+                                if participants_count >= capacity and current_status == "募集中":
+                                    # 定員に達したら締切に
+                                    current_df.at[idx, "status"] = "締切"
+                                elif participants_count < capacity and current_status == "締切":
+                                    # 定員を下回ったら募集中に戻す
+                                    current_df.at[idx, "status"] = "募集中"
+                            
+                            save_reservations(current_df)
+                            st.success("反映しました")
+                            st.rerun()
+        with col_close_main:
+            if st.button("閉じる", use_container_width=True):
+                st.session_state['is_popup_open'] = False
+                # ▼この3つがあれば完璧です
+                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
+                st.session_state['active_event_idx'] = None      # リストの再クリック用
+                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
+
+                st.rerun()
+
         with st.expander("イベント管理メニュー（編集・削除）"):
             edit_tab, delete_tab = st.tabs(["編集", "削除"])
             with edit_tab:
@@ -1176,86 +1256,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     st.session_state['active_event_idx'] = None
                     st.session_state['list_reset_counter'] += 1
                     st.rerun()
-
-        col_upd, col_close_main = st.columns([1, 1])
-        with col_upd:
-            if st.button("反映する", type="primary", use_container_width=True):
-                if not nick:
-                    st.warning("名前を選択してください")
-                else:
-                    current_df = load_reservations()
-                    if idx in current_df.index:
-                        participants = list(current_df.at[idx, "participants"]) if isinstance(current_df.at[idx, "participants"], list) else []
-                        absent = list(current_df.at[idx, "absent"]) if isinstance(current_df.at[idx, "absent"], list) else []
-                        consider = list(current_df.at[idx, "consider"]) if isinstance(current_df.at[idx, "consider"], list) else []
-
-                        # 定員チェック（削除でない場合）
-                        capacity = current_df.at[idx, "capacity"]
-                        current_status = current_df.at[idx, "status"]
-
-                        # capacity を安全に数値変換
-                        if capacity is not None and capacity != "":
-                            try:
-                                capacity = int(capacity)
-                            except (ValueError, TypeError):
-                                capacity = None
-                        else:
-                            capacity = None
-
-                        # 定員チェックとエラーフラグ
-                        capacity_error = False
-                        if part_type != "削除":
-                            # 現在の参加者数（削除予定の人は除外、保留は除外）
-                            temp_participants = [p for p in participants if p != nick]
-                            if part_type == "参加":
-                                temp_participants.append(nick)
-                            # part_type == "保留" の場合は追加しない
-
-                            participants_count = len(temp_participants)
-
-                            # 定員チェック（定員が指定されている場合のみ）
-                            if capacity is not None:
-                                if participants_count > capacity:
-                                    st.error(f"⚠️ 定員に達しています（定員: {capacity}名）")
-                                    capacity_error = True
-
-                        # エラーがない場合だけ保存
-                        if not capacity_error:
-                            # 既存エントリを削除
-                            if nick in participants: participants.remove(nick)
-                            if nick in absent: absent.remove(nick)
-                            if nick in consider: consider.remove(nick)
-
-                            # 新規追加
-                            if part_type == "参加": participants.append(nick)
-                            elif part_type == "保留": consider.append(nick)
-
-                            current_df.at[idx, "participants"] = participants
-                            current_df.at[idx, "absent"] = absent
-                            current_df.at[idx, "consider"] = consider
-
-                            # 自動ステータス変更ロジック（参加者数のみで判定）
-                            participants_count = len(participants)
-                            if capacity is not None:
-                                if participants_count >= capacity and current_status == "募集中":
-                                    # 定員に達したら締切に
-                                    current_df.at[idx, "status"] = "締切"
-                                elif participants_count < capacity and current_status == "締切":
-                                    # 定員を下回ったら募集中に戻す
-                                    current_df.at[idx, "status"] = "募集中"
-
-                            save_reservations(current_df)
-                            st.success("反映しました")
-                            st.rerun()
-        with col_close_main:
-            if st.button("閉じる", use_container_width=True):
-                st.session_state['is_popup_open'] = False
-                # ▼この3つがあれば完璧です
-                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
-                st.session_state['active_event_idx'] = None      # リストの再クリック用
-                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
-
-                st.rerun()
 
 
 # ==========================================
