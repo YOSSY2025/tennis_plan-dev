@@ -1091,7 +1091,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
         with col_type:
             part_type = st.radio("区分", ["参加", "保留", "削除"], horizontal=True, key="edit_type")
 
-        col_upd, _ = st.columns([1, 1])
+        col_upd, col_close_main = st.columns([1, 1])
         with col_upd:
             if st.button("反映する", type="primary", use_container_width=True):
                 if not nick:
@@ -1161,6 +1161,15 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                             save_reservations(current_df)
                             st.success("反映しました")
                             st.rerun()
+        with col_close_main:
+            if st.button("閉じる", use_container_width=True):
+                st.session_state['is_popup_open'] = False
+                # ▼この3つがあれば完璧です
+                st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
+                st.session_state['active_event_idx'] = None      # リストの再クリック用
+                st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
+
+                st.rerun()
 
         with st.expander("管理者メニュー（編集・削除）"):
             edit_tab, delete_tab = st.tabs(["編集", "削除"])
@@ -1245,15 +1254,10 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     st.session_state['list_reset_counter'] += 1
                     st.rerun()
 
-                if st.button("閉じる", use_container_width=True):
-                    st.session_state['is_popup_open'] = False
-                    # ▼この3つがあれば完璧です
-                    st.session_state['last_click_signature'] = None  # カレンダーの同日再クリック用
-                    st.session_state['active_event_idx'] = None      # リストの再クリック用
-                    st.session_state['list_reset_counter'] += 1      # リストの見た目リセット用
 
-                    st.rerun()
-
+# ==========================================
+# 8. ポップアップ表示制御
+# ==========================================
 if st.session_state['is_popup_open']:
     if st.session_state['popup_mode'] == "new":
         d_str = st.session_state.get('clicked_date', str(date.today()))
