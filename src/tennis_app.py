@@ -1057,8 +1057,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             except (ValueError, TypeError):
                 capacity_text = "指定なし"
         st.markdown(f"**定員:** {capacity_text}")
-        # ステータス
-        st.markdown(f"**ステータス:** {r['status']}")
+        
         # 参加者と保留を統合して表示
         parts = []
         participants = r.get('participants') if isinstance(r.get('participants'), list) else []
@@ -1069,6 +1068,10 @@ def entry_form_dialog(mode, idx=None, date_str=None):
             parts.append(f"(保留 {', '.join([str(x) for x in consider if str(x).strip()])})")
         participants_text = " ".join([p for p in parts if p]).strip()
         st.markdown(f"**参加者:** {participants_text if participants_text else 'なし'}")
+
+        # ステータス
+        st.markdown(f"**ステータス:** {r['status']}")
+
         # メモ
         st.markdown(f"**メモ:**\n{display_msg}")
         
@@ -1171,7 +1174,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
                 st.rerun()
 
-        with st.expander("管理者メニュー（編集・削除）"):
+        with st.expander("イベント管理メニュー（編集・削除）"):
             edit_tab, delete_tab = st.tabs(["編集", "削除"])
             with edit_tab:
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
