@@ -1174,7 +1174,7 @@ def entry_form_dialog(mode, idx=None, date_str=None):
 
                 st.rerun()
 
-        with st.expander("イベント管理メニュー（編集・削除）"):
+        with st.expander("イベント編集・削除"):
             edit_tab, delete_tab = st.tabs(["編集", "削除"])
             with edit_tab:
                 new_msg = st.text_area("メモの編集", value=r.get("message", "").replace('<br>', '\n'))
