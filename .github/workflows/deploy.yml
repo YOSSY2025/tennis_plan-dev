@@ -1,0 +1,41 @@
+name: 本番環境へデプロイ
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'デプロイメッセージ（任意）'
+        required: false
+        default: 'Deploy from dev'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 開発リポジトリをチェックアウト
+        uses: actions/checkout@v4
+
+      - name: 本番リポジトリをクローン
+        run: |
+          git clone https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/YOSSY2025/tennis_plan.git prod_repo
+
+      - name: ファイルを本番リポジトリにコピー
+        run: |
+          cp src/tennis_app.py prod_repo/src/
+          cp src/requirements.txt prod_repo/src/
+          cp src/lottery_period_window.py prod_repo/src/
+          cp src/participation_window.py prod_repo/src/
+          cp src/reservation_model.py prod_repo/src/
+
+      - name: 本番リポジトリにコミット＆プッシュ
+        run: |
+          cd prod_repo
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add .
+          if git diff --staged --quiet; then
+            echo "変更なし。デプロイをスキップします。"
+          else
+            git commit -m "${{ github.event.inputs.message || 'Deploy from dev' }}"
+            git push
+          fi
