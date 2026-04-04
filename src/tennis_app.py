@@ -1200,12 +1200,6 @@ def entry_form_dialog(mode, idx=None, date_str=None):
                     if "募集中" in status_options and current_status != "募集中":
                         status_options.remove("募集中")
                 
-                # 締切は「定員に達している」か定員未指定の場合のみ選択可
-                # そのため、容量が設定されていて参加者数が未達成であれば選択肢から除外する
-                if current_capacity is not None and participants_count < current_capacity:
-                    if "締切" in status_options and current_status != "締切":
-                        status_options.remove("締切")
-                
                 current_status_index = status_options.index(current_status) if current_status in status_options else 0
                 new_status = st.selectbox("ステータスの変更", status_options, index=current_status_index)
                 
