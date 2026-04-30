@@ -10,20 +10,22 @@ import plotly.graph_objects as go
 APP_VERSION = "1.0.0"
 
 # スポーツ種別の設定（SPORT_TYPEを変更するだけで対応スポーツを切り替え可能）
-SPORT_TYPE = "フットサル"
+SPORT_TYPE = "テニス"
 
 SPORT_CONFIG = {
-    "テニス":           {"label": "コート種類",    "options": ["オムニ", "クレー", "ハード", "インドア", "不明"]},
-    "フットサル":       {"label": "コート種類",    "options": ["体育館", "芝", "不明"]},
-    "バスケットボール": {"label": "コート種類",    "options": ["体育館", "屋外", "不明"]},
-    "野球":            {"label": "グラウンド種類", "options": ["土", "芝", "不明"]},
-    "サッカー":         {"label": "グラウンド種類", "options": ["土", "芝", "不明"]},
-    "バドミントン":     {"label": None,            "options": []},
-    "卓球":            {"label": None,            "options": []},
+    "テニス":           {"emoji": "🎾", "label": "コート種類",    "options": ["オムニ", "クレー", "ハード", "インドア", "不明"], "color_map": {"不明": "#808080", "オムニ": "#00AA00", "クレー": "#FF8800", "ハード": "#0066FF", "インドア": "#9900CC"}},
+    "フットサル":       {"emoji": "⚽", "label": "コート種類",    "options": ["体育館", "芝", "不明"],                          "color_map": {"不明": "#808080", "体育館": "#0066FF", "芝": "#00AA00"}},
+    "バスケットボール": {"emoji": "🏀", "label": "コート種類",    "options": ["体育館", "屋外", "不明"],                        "color_map": {"不明": "#808080", "体育館": "#0066FF", "屋外": "#00AA00"}},
+    "野球":            {"emoji": "⚾", "label": "グラウンド種類", "options": ["土", "芝", "不明"],                              "color_map": {"不明": "#808080", "土": "#FF8800", "芝": "#00AA00"}},
+    "サッカー":         {"emoji": "⚽", "label": "グラウンド種類", "options": ["土", "芝", "不明"],                              "color_map": {"不明": "#808080", "土": "#FF8800", "芝": "#00AA00"}},
+    "バドミントン":     {"emoji": "🏸", "label": None,            "options": [],                                               "color_map": {"不明": "#808080"}},
+    "卓球":            {"emoji": "🏓", "label": None,            "options": [],                                               "color_map": {"不明": "#808080"}},
 }
 
-COURT_TYPE_LABEL = SPORT_CONFIG[SPORT_TYPE]["label"]
-COURT_TYPES = SPORT_CONFIG[SPORT_TYPE]["options"]
+SPORT_EMOJI       = SPORT_CONFIG[SPORT_TYPE]["emoji"]
+COURT_TYPE_LABEL  = SPORT_CONFIG[SPORT_TYPE]["label"]
+COURT_TYPES       = SPORT_CONFIG[SPORT_TYPE]["options"]
+SPORT_COLOR_MAP   = SPORT_CONFIG[SPORT_TYPE]["color_map"]
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -77,8 +79,7 @@ def generate_google_calendar_url(reservation_data):
     Returns:
         str: Googleカレンダー登録用URL
     """
-    # タイトル生成: 🎾テニス_[施設名]（コート種類）
-    title = f"🎾テニス_{reservation_data['facility']}"
+    title = f"{SPORT_EMOJI}{SPORT_TYPE}_{reservation_data['facility']}"
     ct = reservation_data.get('court_type')
     if ct and ct != "不明":
         title += f" ({ct})"
@@ -342,7 +343,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # アプリタイトル
-st.markdown("<h3>🎾 テニスコート予約管理</h3>", unsafe_allow_html=True)
+st.markdown(f"<h3>{SPORT_EMOJI} {SPORT_TYPE}予約管理</h3>", unsafe_allow_html=True)
 
 # バージョン表示（別行・小さく）
 # スマホでタイトルが改行される問題を回避するため、タイトルとは別に表示
@@ -662,23 +663,17 @@ elif view_mode == "実績":
             if len(summary_by_court) > 0:
                 st.markdown("---")
                 
-                # 練習回数の棒グラフ（コート種別で色分け・積み上げ）
-                color_map = {
-                    '不明': '#808080',  # グレー
-                    'ハード': '#0066FF',  # 青
-                    'オムニ': '#00AA00',  # 緑
-                    'クレー': '#FF8800'  # オレンジ
-                }
+                court_label = COURT_TYPE_LABEL or "種別"
                 fig_count = px.bar(
                     summary_by_court,
                     x='year_month',
                     y='events_count',
                     color='court_type',
                     title=f'月別練習回数 - {selected_person}',
-                    labels={'year_month': '', 'events_count': '練習回数（回）', 'court_type': 'コート種類'},
+                    labels={'year_month': '', 'events_count': '練習回数（回）', 'court_type': court_label},
                     text='events_count',
                     barmode='stack',
-                    color_discrete_map=color_map
+                    color_discrete_map=SPORT_COLOR_MAP
                 )
                 fig_count.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white', size=14))
                 fig_count.update_layout(
@@ -706,10 +701,10 @@ elif view_mode == "実績":
                     y='total_hours',
                     color='court_type',
                     title=f'月別練習時間 - {selected_person}',
-                    labels={'year_month': '', 'total_hours': '練習時間（時間）', 'court_type': 'コート種類'},
+                    labels={'year_month': '', 'total_hours': '練習時間（時間）', 'court_type': court_label},
                     text='total_hours',
                     barmode='stack',
-                    color_discrete_map=color_map
+                    color_discrete_map=SPORT_COLOR_MAP
                 )
                 fig_hours.update_traces(textposition='inside', texttemplate='%{text:.0f}', textangle=0, textfont=dict(color='white', size=14))
                 fig_hours.update_layout(
