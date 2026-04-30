@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 APP_VERSION = "1.0.0"
 
 # スポーツ種別の設定（SPORT_TYPEを変更するだけで対応スポーツを切り替え可能）
-SPORT_TYPE = "テニス"
+SPORT_TYPE = "野球"
 
 SPORT_CONFIG = {
     "テニス":           {"emoji": "🎾", "label": "コート種類",    "options": ["オムニ", "クレー", "ハード", "インドア", "不明"], "color_map": {"不明": "#808080", "オムニ": "#00AA00", "クレー": "#FF8800", "ハード": "#0066FF", "インドア": "#9900CC"}},
