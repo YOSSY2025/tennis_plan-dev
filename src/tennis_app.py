@@ -9,8 +9,21 @@ import plotly.graph_objects as go
 # アプリバージョン
 APP_VERSION = "1.0.0"
 
-# コート種類の定義（仕様書で固定）
-COURT_TYPES = ["オムニ", "クレー", "ハード", "インドア", "不明"]
+# スポーツ種別の設定（SPORT_TYPEを変更するだけで対応スポーツを切り替え可能）
+SPORT_TYPE = "テニス"
+
+SPORT_CONFIG = {
+    "テニス":           {"label": "コート種類",    "options": ["オムニ", "クレー", "ハード", "インドア", "不明"]},
+    "フットサル":       {"label": "コート種類",    "options": ["体育館", "芝", "不明"]},
+    "バスケットボール": {"label": "コート種類",    "options": ["体育館", "屋外", "不明"]},
+    "野球":            {"label": "グラウンド種類", "options": ["土", "芝", "不明"]},
+    "サッカー":         {"label": "グラウンド種類", "options": ["土", "芝", "不明"]},
+    "バドミントン":     {"label": None,            "options": []},
+    "卓球":            {"label": None,            "options": []},
+}
+
+COURT_TYPE_LABEL = SPORT_CONFIG[SPORT_TYPE]["label"]
+COURT_TYPES = SPORT_CONFIG[SPORT_TYPE]["options"]
 
 import gspread
 from google.oauth2.service_account import Credentials
