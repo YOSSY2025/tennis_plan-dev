@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 APP_VERSION = "1.0.0"
 
 # スポーツ種別の設定（SPORT_TYPEを変更するだけで対応スポーツを切り替え可能）
-SPORT_TYPE = "テニス"
+SPORT_TYPE = "フットサル"
 
 SPORT_CONFIG = {
     "テニス":           {"label": "コート種類",    "options": ["オムニ", "クレー", "ハード", "インドア", "不明"]},
