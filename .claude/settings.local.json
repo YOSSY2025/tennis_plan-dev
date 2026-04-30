@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git remote:*)",
+      "WebSearch",
+      "Bash(npx:*)",
+      "Bash(winget install:*)",
+      "Bash(git rm *)",
+      "Bash(gh repo *)"
+    ]
+  }
+}
