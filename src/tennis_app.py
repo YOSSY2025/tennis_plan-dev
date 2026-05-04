@@ -317,11 +317,14 @@ def check_and_show_reminders():
             elif freq == "weekly":
                 if today.strftime("%a") in str(row.get("weekdays", "")): is_match = True
             elif freq == "yearly":
+                import calendar as _cal
                 s_month = int(row.get("start_month", 0))
                 s_day = int(row.get("start_day", 0))
                 e_month = int(row.get("end_month", 0))
                 e_day = int(row.get("end_day", 0))
                 if s_month > 0:
+                    s_day = min(s_day, _cal.monthrange(today.year, s_month)[1])
+                    e_day = min(e_day, _cal.monthrange(today.year, e_month)[1])
                     start_date = date(today.year, s_month, s_day)
                     end_date = date(today.year, e_month, e_day)
                     if start_date > end_date: 
